@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import {
-  clearSession, hashPassword, isAdminEmail, sessionUserId, setSession, verifyPassword,
+  hashPassword, isAdminEmail, sessionUserId, setSession, verifyPassword,
 } from "@/lib/auth";
 
 export interface AuthFormState {
@@ -80,10 +80,5 @@ export async function loginAction(
   }
 
   await setSession(user.id);
-  redirect("/");
-}
-
-export async function logoutAction(): Promise<void> {
-  await clearSession();
   redirect("/");
 }

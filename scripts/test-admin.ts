@@ -18,7 +18,15 @@ const load = (Module as unknown as { _load: (...a: unknown[]) => unknown })._loa
 import { PrismaClient } from "@prisma/client";
 const db = new PrismaClient();
 let fail = 0, n = 0;
-const ck = (l: string, c: boolean, d = "") => { n++; c ? console.log("  ok   " + l) : (fail++, console.error(`  FAIL ${l} ${d}`)); };
+const ck = (l: string, c: boolean, d = ""): void => {
+  n++;
+  if (c) {
+    console.log(`  ok   ${l}`);
+  } else {
+    fail++;
+    console.error(`  FAIL ${l} ${d}`);
+  }
+};
 
 (async () => {
   const admin = await import("../src/lib/admin");
@@ -73,7 +81,11 @@ const ck = (l: string, c: boolean, d = "") => { n++; c ? console.log("  ok   " +
   const cat = await (await import("../src/lib/catalogue")).listCatalogue();
   ck("it appears in the catalogue", cat.some((c: { id: string }) => c.id === "test-form-01"));
   const form = JSON.parse((await db.curatedForm.findUnique({ where: { id: "test-form-01" } }))!.form);
-  const allIds = [...form.modules.flatMap((m: any) => m.questionIds), ...Object.values(form.routedModules).flatMap((m: any) => m.questionIds)];
+  type FormModule = { questionIds: string[] };
+  const allIds = [
+    ...(form.modules as FormModule[]).flatMap((m) => m.questionIds),
+    ...(Object.values(form.routedModules) as FormModule[]).flatMap((m) => m.questionIds),
+  ];
   ck("no duplicate ids in the built form", new Set(allIds).size === allIds.length);
   await admin.deleteCuratedForm("test-form-01");
 

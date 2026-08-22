@@ -12,18 +12,30 @@ import { BREAK_MINUTES } from "@/lib/sat/blueprint";
  * automatically when the time runs out. The Math section's own clock does not
  * begin until the module directions screen is dismissed.
  */
+export interface BreakSectionScore {
+  label: string;
+  scaled: number;
+  raw: number;
+  total: number;
+  cappedByRoute: boolean;
+  ceiling: number;
+}
+
 export function BreakScreen({
   attemptId,
   breakEndsAtMs,
+  sectionScore,
 }: {
   attemptId: string;
   breakEndsAtMs: number | null;
+  sectionScore?: BreakSectionScore | null;
 }) {
   const router = useRouter();
   const [remaining, setRemaining] = useState(() =>
     breakEndsAtMs ? Math.max(0, breakEndsAtMs - Date.now()) : BREAK_MINUTES * 60 * 1000,
   );
   const [ending, setEnding] = useState(false);
+  const [revealed, setRevealed] = useState(false);
 
   const resume = useCallback(async () => {
     setEnding(true);
@@ -65,6 +77,39 @@ export function BreakScreen({
             {formatClock(Math.ceil(remaining / 1000))}
           </p>
         </div>
+
+        {sectionScore ? (
+          <div className="mx-auto mt-6 w-full max-w-sm">
+            {revealed ? (
+              <div className="card animate-scale-in px-5 py-4 text-left">
+                <p className="text-[12px] font-semibold uppercase tracking-wide text-faint">
+                  {sectionScore.label}
+                </p>
+                <p className="mt-1 text-[32px] font-semibold leading-none tabular-nums text-accent">
+                  {sectionScore.scaled}
+                </p>
+                <p className="mt-2 text-[13px] text-muted">
+                  {sectionScore.raw} of {sectionScore.total} correct.
+                  {sectionScore.cappedByRoute
+                    ? ` The second module you received caps this section near ${sectionScore.ceiling}.`
+                    : ""}
+                </p>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setRevealed(true)}
+                className="btn-ghost btn-sm w-full"
+              >
+                Show my Reading and Writing score
+              </button>
+            )}
+            <p className="mt-2 text-[12px] leading-relaxed text-faint">
+              The real test does not show a section score before you finish, so this is here only
+              if you want it. Your Math performance does not change it.
+            </p>
+          </div>
+        ) : null}
 
         <button type="button" onClick={resume} disabled={ending} className="btn-primary mt-8">
           {ending ? "Resuming…" : "Resume testing"}

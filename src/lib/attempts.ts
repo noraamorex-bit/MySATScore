@@ -150,17 +150,17 @@ async function ensureModule(attempt: Attempt, ordinal: number): Promise<AttemptM
   let durationSeconds: number;
 
   if (step.module === 1) {
-    const module = form.modules.find((m) => m.subject === step.subject);
-    if (!module) throw new Error(`Form is missing module 1 for ${step.subject}`);
-    questionIds = module.questionIds;
-    durationSeconds = module.durationSeconds;
+    const planned = form.modules.find((m) => m.subject === step.subject);
+    if (!planned) throw new Error(`Form is missing module 1 for ${step.subject}`);
+    questionIds = planned.questionIds;
+    durationSeconds = planned.durationSeconds;
   } else {
     const routes = parseRoutes(attempt);
     route = routes[step.subject] ?? "lower";
-    const module = form.routedModules[`${step.subject}:${route}`];
-    if (!module) throw new Error(`Form is missing the ${route} module for ${step.subject}`);
-    questionIds = module.questionIds;
-    durationSeconds = module.durationSeconds;
+    const routed = form.routedModules[`${step.subject}:${route}`];
+    if (!routed) throw new Error(`Form is missing the ${route} module for ${step.subject}`);
+    questionIds = routed.questionIds;
+    durationSeconds = routed.durationSeconds;
   }
 
   return db.attemptModule.create({
@@ -180,15 +180,15 @@ async function ensureModule(attempt: Attempt, ordinal: number): Promise<AttemptM
 /** Starts the clock on a module. Idempotent: restarting never extends time. */
 export async function startModule(attemptId: string, ordinal: number): Promise<AttemptModule> {
   const attempt = await loadAttempt(attemptId);
-  const module = await ensureModule(attempt, ordinal);
-  if (module.status !== "pending") return module;
+  const current = await ensureModule(attempt, ordinal);
+  if (current.status !== "pending") return current;
   const now = new Date();
   return db.attemptModule.update({
-    where: { id: module.id },
+    where: { id: current.id },
     data: {
       status: "active",
       startedAt: now,
-      endsAt: new Date(now.getTime() + module.durationSeconds * 1000),
+      endsAt: new Date(now.getTime() + current.durationSeconds * 1000),
     },
   });
 }
@@ -210,12 +210,12 @@ export async function reconcile(attemptId: string): Promise<void> {
   if (attempt.status !== "in-progress") return;
 
   for (let guard = 0; guard < 8; guard += 1) {
-    const module = await db.attemptModule.findUnique({
+    const current = await db.attemptModule.findUnique({
       where: { attemptId_ordinal: { attemptId, ordinal: attempt.cursor } },
     });
-    if (!module || module.status !== "active" || !module.endsAt) break;
-    if (module.endsAt.getTime() + GRACE_MS > Date.now()) break;
-    await submitModule(attemptId, module.ordinal, { timedOut: true });
+    if (!current || current.status !== "active" || !current.endsAt) break;
+    if (current.endsAt.getTime() + GRACE_MS > Date.now()) break;
+    await submitModule(attemptId, current.ordinal, { timedOut: true });
     attempt = await loadAttempt(attemptId);
     if (attempt.status !== "in-progress") break;
   }
@@ -240,15 +240,15 @@ export async function saveAnswer(input: SaveAnswerInput): Promise<SaveAnswerResu
   const attempt = await loadAttempt(input.attemptId);
   if (attempt.status !== "in-progress") return { ok: false, reason: "module-closed" };
 
-  const module = await db.attemptModule.findUnique({
+  const current = await db.attemptModule.findUnique({
     where: { attemptId_ordinal: { attemptId: attempt.id, ordinal: attempt.cursor } },
   });
-  if (!module || module.status !== "active") return { ok: false, reason: "module-closed" };
-  if (module.endsAt && module.endsAt.getTime() + GRACE_MS < Date.now()) {
+  if (!current || current.status !== "active") return { ok: false, reason: "module-closed" };
+  if (current.endsAt && current.endsAt.getTime() + GRACE_MS < Date.now()) {
     return { ok: false, reason: "module-closed" };
   }
 
-  const questionIds = JSON.parse(module.questionIds) as string[];
+  const questionIds = JSON.parse(current.questionIds) as string[];
   if (!questionIds.includes(input.questionId)) return { ok: false, reason: "not-in-module" };
 
   const bank = await getBank();
@@ -262,7 +262,7 @@ export async function saveAnswer(input: SaveAnswerInput): Promise<SaveAnswerResu
     where: { attemptId_questionId: { attemptId: attempt.id, questionId: input.questionId } },
     create: {
       attemptId: attempt.id,
-      moduleId: module.id,
+      moduleId: current.id,
       questionId: input.questionId,
       given: given ?? null,
       isCorrect: correct ?? false,
@@ -296,22 +296,22 @@ export async function submitModule(
   options: { timedOut?: boolean } = {},
 ): Promise<SubmitResult> {
   const attempt = await loadAttempt(attemptId);
-  const module = await db.attemptModule.findUnique({
+  const current = await db.attemptModule.findUnique({
     where: { attemptId_ordinal: { attemptId, ordinal } },
   });
-  if (!module) throw new Error(`No module at position ${ordinal}`);
+  if (!current) throw new Error(`No module at position ${ordinal}`);
 
-  if (module.status === "submitted" || module.status === "expired") {
+  if (current.status === "submitted" || current.status === "expired") {
     return {
       attemptComplete: attempt.status === "completed",
       nextOrdinal: attempt.cursor === ordinal ? null : attempt.cursor,
       breakStarted: attempt.onBreak,
-      route: module.route as RoutePath | null,
+      route: current.route as RoutePath | null,
     };
   }
 
   await db.attemptModule.update({
-    where: { id: module.id },
+    where: { id: current.id },
     data: {
       status: options.timedOut ? "expired" : "submitted",
       submittedAt: new Date(),
@@ -319,18 +319,18 @@ export async function submitModule(
     },
   });
 
-  await recordExposures(attempt.userId, attemptId, module);
+  await recordExposures(attempt.userId, attemptId, current);
 
   const plan = modulePlan(attempt.kind as TestKind);
-  const subject = module.subject as Subject;
-  let route: RoutePath | null = module.route as RoutePath | null;
+  const subject = current.subject as Subject;
+  let route: RoutePath | null = current.route as RoutePath | null;
 
   // Module 1 determines which second module the test taker receives.
-  if (module.module === 1) {
-    const questionIds = JSON.parse(module.questionIds) as string[];
+  if (current.module === 1) {
+    const questionIds = JSON.parse(current.questionIds) as string[];
     const questions = await getQuestions(questionIds);
     const answers = await db.answer.findMany({
-      where: { attemptId, moduleId: module.id },
+      where: { attemptId, moduleId: current.id },
       select: { questionId: true, isCorrect: true },
     });
     const correctById: Record<string, boolean> = {};
@@ -384,38 +384,47 @@ export async function endBreak(attemptId: string): Promise<void> {
 async function recordExposures(
   userId: string,
   attemptId: string,
-  module: AttemptModule,
+  served: AttemptModule,
 ): Promise<void> {
-  const questionIds = JSON.parse(module.questionIds) as string[];
+  const questionIds = JSON.parse(served.questionIds) as string[];
   const answers = await db.answer.findMany({
-    where: { attemptId, moduleId: module.id },
+    where: { attemptId, moduleId: served.id },
     select: { questionId: true, isCorrect: true, given: true },
   });
   const answerBy = new Map(answers.map((a) => [a.questionId, a]));
   const now = new Date();
 
-  for (const questionId of questionIds) {
-    const answer = answerBy.get(questionId);
-    const wasCorrect = answer?.given ? answer.isCorrect : null;
-    await db.questionExposure.upsert({
-      where: { userId_questionId: { userId, questionId } },
-      create: { userId, questionId, attemptId, seenAt: now, wasCorrect },
-      update: { seenAt: now, attemptId, wasCorrect },
-    });
-    await db.questionStat.upsert({
-      where: { questionId },
-      create: {
-        questionId,
-        timesServed: 1,
-        timesCorrect: wasCorrect ? 1 : 0,
-        lastServedAt: now,
-      },
-      update: {
-        timesServed: { increment: 1 },
-        ...(wasCorrect ? { timesCorrect: { increment: 1 } } : {}),
-        lastServedAt: now,
-      },
-    });
+  // Upserts cannot be batched into a single statement, but they are independent
+  // of one another, so they run concurrently in bounded chunks — a module
+  // submit is a foreground action and 50-odd sequential round trips would be
+  // felt on a hosted database.
+  const CHUNK = 12;
+  for (let i = 0; i < questionIds.length; i += CHUNK) {
+    await Promise.all(
+      questionIds.slice(i, i + CHUNK).map(async (questionId) => {
+        const answer = answerBy.get(questionId);
+        const wasCorrect = answer?.given ? answer.isCorrect : null;
+        await db.questionExposure.upsert({
+          where: { userId_questionId: { userId, questionId } },
+          create: { userId, questionId, attemptId, seenAt: now, wasCorrect },
+          update: { seenAt: now, attemptId, wasCorrect },
+        });
+        await db.questionStat.upsert({
+          where: { questionId },
+          create: {
+            questionId,
+            timesServed: 1,
+            timesCorrect: wasCorrect ? 1 : 0,
+            lastServedAt: now,
+          },
+          update: {
+            timesServed: { increment: 1 },
+            ...(wasCorrect ? { timesCorrect: { increment: 1 } } : {}),
+            lastServedAt: now,
+          },
+        });
+      }),
+    );
   }
 }
 
@@ -453,10 +462,10 @@ export async function buildScoredResponses(attempt: Attempt): Promise<ScoredResp
   const bank = await getBank();
 
   const responses: ScoredResponse[] = [];
-  for (const module of modules) {
+  for (const served of modules) {
     // A module that was never reached contributes nothing.
-    if (module.status === "pending") continue;
-    const questionIds = JSON.parse(module.questionIds) as string[];
+    if (served.status === "pending") continue;
+    const questionIds = JSON.parse(served.questionIds) as string[];
     for (const questionId of questionIds) {
       const question = bank.byId.get(questionId);
       if (!question) continue;
@@ -470,7 +479,7 @@ export async function buildScoredResponses(attempt: Attempt): Promise<ScoredResp
         subdomain: question.subdomain,
         skills: question.skills,
         subject: question.subject,
-        module: module.module as 1 | 2,
+        module: served.module as 1 | 2,
         timeSpentMs: answer?.timeSpentMs ?? 0,
         flagged: answer?.flagged ?? false,
       });
@@ -520,10 +529,10 @@ export async function getRunnerState(attemptId: string, userId: string): Promise
   if (!attempt) return null;
   if (attempt.status !== "in-progress") return null;
 
-  const module = await ensureModule(attempt, attempt.cursor);
-  const questionIds = JSON.parse(module.questionIds) as string[];
+  const current = await ensureModule(attempt, attempt.cursor);
+  const questionIds = JSON.parse(current.questionIds) as string[];
   const questions = await getQuestions(questionIds);
-  const answers = await db.answer.findMany({ where: { attemptId, moduleId: module.id } });
+  const answers = await db.answer.findMany({ where: { attemptId, moduleId: current.id } });
   const answerBy = new Map(answers.map((a) => [a.questionId, a]));
   const plan = modulePlan(attempt.kind as TestKind);
 
@@ -538,15 +547,15 @@ export async function getRunnerState(attemptId: string, userId: string): Promise
       breakEndsAtMs: attempt.breakEndsAt?.getTime() ?? null,
     },
     module: {
-      id: module.id,
-      ordinal: module.ordinal,
-      subject: module.subject as Subject,
-      module: module.module as ModuleNumber,
-      route: module.route as RoutePath | null,
-      status: module.status,
-      durationSeconds: module.durationSeconds,
-      endsAtMs: module.endsAt?.getTime() ?? null,
-      position: module.ordinal + 1,
+      id: current.id,
+      ordinal: current.ordinal,
+      subject: current.subject as Subject,
+      module: current.module as ModuleNumber,
+      route: current.route as RoutePath | null,
+      status: current.status,
+      durationSeconds: current.durationSeconds,
+      endsAtMs: current.endsAt?.getTime() ?? null,
+      position: current.ordinal + 1,
       total: plan.length,
     },
     questions: questions.map((question, index) => {

@@ -17,6 +17,7 @@ import { questionSchema } from "./sat/schema";
 import type { Difficulty, Domain, Question, Subject } from "./sat/types";
 
 const STATIC_QUESTIONS = bankFile.questions as unknown as Question[];
+const STATIC_IDS = new Set(STATIC_QUESTIONS.map((q) => q.id));
 
 export interface BankSnapshot {
   questions: Question[];
@@ -151,5 +152,5 @@ export async function searchBank(filter: BankFilter): Promise<Question[]> {
 
 /** Whether a question came from the generated file rather than the overlay. */
 export function isStaticQuestion(id: string): boolean {
-  return STATIC_QUESTIONS.some((q) => q.id === id);
+  return STATIC_IDS.has(id);
 }

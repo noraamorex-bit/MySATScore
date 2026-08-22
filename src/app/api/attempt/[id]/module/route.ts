@@ -21,8 +21,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
   if (parsed.data.action === "start") {
-    const module = await startModule(id, parsed.data.ordinal);
-    return NextResponse.json({ started: true, endsAtMs: module.endsAt?.getTime() ?? null });
+    const started = await startModule(id, parsed.data.ordinal);
+    return NextResponse.json({ started: true, endsAtMs: started.endsAt?.getTime() ?? null });
   }
 
   const result = await submitModule(id, parsed.data.ordinal);

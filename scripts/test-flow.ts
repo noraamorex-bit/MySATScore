@@ -151,6 +151,15 @@ async function main(): Promise<void> {
   section("Attempt 1 — break, then Math with an expired timer");
   const onBreak = await db.attempt.findUnique({ where: { id: attempt.id } });
   check("break is recorded with an end time", onBreak?.onBreak === true && Boolean(onBreak?.breakEndsAt));
+
+  const rwAtBreak = await analytics.getSectionScoreSoFar(attempt.id, user.id, "rw");
+  check("the Reading and Writing score is available at the break",
+    rwAtBreak !== null && rwAtBreak.scaled >= 200 && rwAtBreak.scaled <= 800,
+    String(rwAtBreak?.scaled));
+  check("that score reflects both Reading and Writing modules",
+    rwAtBreak?.total === MODULE_SPEC.rw.questions * 2, String(rwAtBreak?.total));
+  const mathAtBreak = await analytics.getSectionScoreSoFar(attempt.id, user.id, "math");
+  check("no Math score is offered before Math has been taken", mathAtBreak === null);
   await attempts.endBreak(attempt.id);
 
   await attempts.startModule(attempt.id, 2);

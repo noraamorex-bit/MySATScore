@@ -11,7 +11,7 @@ import { db } from "./db";
 import { getBank } from "./bank";
 import { buildScoredResponses } from "./attempts";
 import { activeScoringConfig } from "./scoring-store";
-import { scoreSections, type ScoredResponse, type TotalScore } from "./sat/scoring";
+import { scoreSections, type ScoredResponse, type SectionScore, type TotalScore } from "./sat/scoring";
 import { DOMAIN_LABELS, type Difficulty, type Question, type RoutePath, type Subject } from "./sat/types";
 import { SUBJECT_LABEL } from "./sat/blueprint";
 
@@ -285,6 +285,36 @@ function buildRecommendations(
   return out.slice(0, 5);
 }
 
+/**
+ * The scaled score for one section of an attempt that is still in progress.
+ *
+ * Used by the break screen, where a test taker can choose to see how Reading
+ * and Writing went before starting Math. The real exam does not show this, so
+ * it is offered behind a deliberate action rather than displayed by default.
+ */
+export async function getSectionScoreSoFar(
+  attemptId: string,
+  userId: string,
+  subject: Subject,
+): Promise<SectionScore | null> {
+  const attempt = await db.attempt.findFirst({ where: { id: attemptId, userId } });
+  if (!attempt) return null;
+
+  const modules = await db.attemptModule.findMany({
+    where: { attemptId, subject, status: { in: ["submitted", "expired"] } },
+  });
+  // Both modules of the section must be finished for the score to mean anything.
+  if (modules.length < 2) return null;
+
+  const responses = (await buildScoredResponses(attempt)).filter((r) => r.subject === subject);
+  if (responses.length === 0) return null;
+
+  const routes = safeParse<Partial<Record<Subject, RoutePath>>>(attempt.routes, {});
+  const config = await activeScoringConfig();
+  const scored = scoreSections(responses, { [subject]: routes[subject] } as Partial<Record<Subject, RoutePath>>, config);
+  return scored.sections[0] ?? null;
+}
+
 /* ------------------------------------------------------------- history */
 
 export interface HistoryEntry {
@@ -307,17 +337,39 @@ export async function getHistory(userId: string, limit = 50): Promise<HistoryEnt
     orderBy: { completedAt: "asc" },
     take: limit,
   });
+  if (attempts.length === 0) return [];
 
-  const entries: HistoryEntry[] = [];
-  for (const attempt of attempts) {
-    const score = attempt.scoreSnapshot ? safeParse<TotalScore | null>(attempt.scoreSnapshot, null) : null;
-    const counts = await db.answer.aggregate({
-      where: { attemptId: attempt.id },
+  const attemptIds = attempts.map((a) => a.id);
+
+  // One query each for correct-answer counts and served-question counts, rather
+  // than a pair of queries per attempt — the history page would otherwise issue
+  // a hundred round trips to draw one chart.
+  const [correctByAttempt, modules] = await Promise.all([
+    db.answer.groupBy({
+      by: ["attemptId"],
+      where: { attemptId: { in: attemptIds }, isCorrect: true },
       _count: { _all: true },
-    });
-    const correct = await db.answer.count({ where: { attemptId: attempt.id, isCorrect: true } });
-    const totalQuestions = await countFormQuestions(attempt);
-    entries.push({
+    }),
+    db.attemptModule.findMany({
+      where: { attemptId: { in: attemptIds }, status: { in: ["submitted", "expired"] } },
+      select: { attemptId: true, questionIds: true },
+    }),
+  ]);
+
+  const correctCounts = new Map(correctByAttempt.map((row) => [row.attemptId, row._count._all]));
+  const servedCounts = new Map<string, number>();
+  for (const served of modules) {
+    const count = safeParse<string[]>(served.questionIds, []).length;
+    servedCounts.set(served.attemptId, (servedCounts.get(served.attemptId) ?? 0) + count);
+  }
+
+  return attempts.map((attempt) => {
+    const score = attempt.scoreSnapshot
+      ? safeParse<TotalScore | null>(attempt.scoreSnapshot, null)
+      : null;
+    const correct = correctCounts.get(attempt.id) ?? 0;
+    const totalQuestions = servedCounts.get(attempt.id) ?? 0;
+    return {
       id: attempt.id,
       title: attempt.title,
       kind: attempt.kind,
@@ -328,19 +380,9 @@ export async function getHistory(userId: string, limit = 50): Promise<HistoryEnt
       correct,
       totalQuestions,
       accuracy: totalQuestions ? correct / totalQuestions : 0,
-    routes: safeParse<Partial<Record<Subject, RoutePath>>>(attempt.routes, {}),
-    });
-    void counts;
-  }
-  return entries;
-}
-
-async function countFormQuestions(attempt: Attempt): Promise<number> {
-  const modules = await db.attemptModule.findMany({
-    where: { attemptId: attempt.id, status: { in: ["submitted", "expired"] } },
-    select: { questionIds: true },
+      routes: safeParse<Partial<Record<Subject, RoutePath>>>(attempt.routes, {}),
+    };
   });
-  return modules.reduce((sum, m) => sum + safeParse<string[]>(m.questionIds, []).length, 0);
 }
 
 /** Aggregate performance across every completed attempt, for the dashboard. */

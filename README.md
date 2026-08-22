@@ -57,6 +57,7 @@ else has to change. `npm run db:use-sqlite` switches back.
 | `npm run test:flow` | End-to-end attempt lifecycle, routing, scoring, edge cases |
 | `npm run test:admin` | Admin CRUD, retirement, replacement, CSV round trip, form building |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint (Next.js core-web-vitals + TypeScript rules) |
 | `npm run db:studio` | Prisma Studio |
 
 ---
@@ -255,6 +256,10 @@ never does.
 ---
 
 ## Results and review
+
+At the break, the Reading and Writing section score is available behind a
+deliberate control — the real exam does not show it, so it is offered rather
+than displayed.
 
 After a test: total and section scores, which routed form you received and
 whether it capped your ceiling, raw counts, accuracy, performance by domain and

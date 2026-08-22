@@ -93,12 +93,11 @@ export function buildCuratedCatalogue(bank: Question[]): CuratedCatalogue {
       seenIds: spent,
       reuseIsExpected: true,
     });
-    for (const module of [...test.modules, ...Object.values(test.routedModules)]) {
-      for (const id of module.questionIds) {
+    for (const formModule of [...test.modules, ...Object.values(test.routedModules)]) {
+      for (const id of formModule.questionIds) {
         if (!spent.has(id)) {
           spent.add(id);
-          const subject = module.subject;
-          unspent[subject] = Math.max(0, unspent[subject] - 1);
+          unspent[formModule.subject] = Math.max(0, unspent[formModule.subject] - 1);
         }
       }
     }

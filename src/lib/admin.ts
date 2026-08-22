@@ -247,8 +247,8 @@ export async function buildCuratedForm(options: {
   const spent = new Set<string>();
   for (const row of published) {
     const form = JSON.parse(row.form) as AssembledTest;
-    for (const module of [...form.modules, ...Object.values(form.routedModules)]) {
-      for (const questionId of module.questionIds) spent.add(questionId);
+    for (const formModule of [...form.modules, ...Object.values(form.routedModules)]) {
+      for (const questionId of formModule.questionIds) spent.add(questionId);
     }
   }
 

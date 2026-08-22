@@ -22,7 +22,7 @@ export interface QuestionPaneProps {
 }
 
 export function QuestionPane(props: QuestionPaneProps) {
-  const { question, number, total, given, flagged } = props;
+  const { question, number, total, flagged } = props;
   const splitLayout = Boolean(question.stimulus) && question.stimulus?.type === "passage";
 
   return (

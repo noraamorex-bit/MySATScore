@@ -5,7 +5,7 @@
 import { Rng } from "../rng";
 import { ORIGINAL, assertClose, type ItemBody, type Template } from "../types";
 import {
-  acceptedNumericForms, buildChoices, factorOf, frac, joinTerms, linear, money,
+  acceptedNumericForms, buildChoices, factorOf, frac, linear,
   num, quadratic, signed, term, texFrac,
 } from "../util";
 import { CITY_SETTINGS, MEASURED_QUANTITIES, NAMES, SPECIES, TIME_UNITS } from "../corpus";
@@ -572,9 +572,9 @@ export const ADVANCED_TEMPLATES: Template[] = [
     calculator: "not-needed",
     variants: 12,
     build(rng: Rng): ItemBody {
-      let [r1, r2] = roots(rng);
+      const [r1, drawn] = roots(rng);
       // Opposite roots collapse several distractors onto the key, so nudge them apart.
-      if (r1 === -r2) r2 = r2 > 0 ? r2 + 1 : r2 - 1;
+      const r2 = drawn === -r1 ? (drawn > 0 ? drawn + 1 : drawn - 1) : drawn;
       const b = -(r1 + r2);
       const c = r1 * r2;
       const correct = `$x ${signed(-r2)}$`;

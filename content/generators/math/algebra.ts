@@ -63,8 +63,8 @@ export const ALGEBRA_TEMPLATES: Template[] = [
     variants: 16,
     build(rng: Rng): ItemBody {
       // a(x + p) = b(x + q), solved so the root is a tidy value.
-      let a = rng.int(2, 7);
-      let b = rng.intExcept(2, 8, [a]);
+      const a = rng.int(2, 7);
+      const b = rng.intExcept(2, 8, [a]);
       const x = rng.intExcept(-8, 10, [0]);
       // a*x + a*p = b*x + b*q  ->  choose p, derive q.
       const p = rng.intExcept(-9, 9, [0]);

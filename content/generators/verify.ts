@@ -105,18 +105,19 @@ for (const test of catalogue.tests) {
 
   const modules = [...test.modules, ...Object.values(test.routedModules)];
   const used = new Set<string>();
-  for (const module of modules) {
-    const expected = MODULE_SPEC[module.subject as Subject].questions;
-    if (module.questionIds.length !== expected) {
+  for (const formModule of modules) {
+    const expected = MODULE_SPEC[formModule.subject as Subject].questions;
+    if (formModule.questionIds.length !== expected) {
       fail(
-        `${test.id}: ${module.subject} module ${module.module}${module.route ? ` (${module.route})` : ""} has ` +
-          `${module.questionIds.length} questions, expected ${expected}`,
+        `${test.id}: ${formModule.subject} module ${formModule.module}` +
+          `${formModule.route ? ` (${formModule.route})` : ""} has ` +
+          `${formModule.questionIds.length} questions, expected ${expected}`,
       );
     }
-    if (module.durationSeconds !== MODULE_SPEC[module.subject as Subject].minutes * 60) {
-      fail(`${test.id}: ${module.subject} module has the wrong duration`);
+    if (formModule.durationSeconds !== MODULE_SPEC[formModule.subject as Subject].minutes * 60) {
+      fail(`${test.id}: ${formModule.subject} module has the wrong duration`);
     }
-    for (const id of module.questionIds) {
+    for (const id of formModule.questionIds) {
       if (!ids.has(id)) fail(`${test.id}: references unknown question ${id}`);
       if (used.has(id)) fail(`${test.id}: question ${id} appears more than once in the form`);
       used.add(id);

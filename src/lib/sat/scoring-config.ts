@@ -24,7 +24,7 @@
  * the codebase needs to change.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-import type { RoutePath, Subject } from "./types";
+import type { Subject } from "./types";
 
 /** `[rawScore, scaledScore]` anchors; values between anchors are interpolated. */
 export type ScaleAnchors = [raw: number, scaled: number][];
