@@ -1,0 +1,203 @@
+// MySATScore data model.
+//
+// The default datasource is SQLite so `npm run setup` works with no external
+// services. `npm run db:use-postgres` rewrites the provider for PostgreSQL or
+// Supabase; every field below uses types and defaults that are portable across
+// both, and structured values are stored as JSON strings rather than native
+// JSON columns for the same reason.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// A registered user. Guests are represented by a User row with isGuest = true,
+/// so progress, history, and analytics work identically before sign-up.
+model User {
+  id           String   @id @default(cuid())
+  email        String?  @unique
+  name         String?
+  passwordHash String?
+  /// "student" | "admin"
+  role         String   @default("student")
+  isGuest      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  attempts   Attempt[]
+  exposures  QuestionExposure[]
+
+  @@index([role])
+}
+
+/// One sitting of a test. `form` is the frozen assembled test, so a rebuilt
+/// question bank can never change an attempt that is already in progress.
+model Attempt {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Catalogue id for curated forms, or the generated form id.
+  testId    String
+  title     String
+  /// "full" | "rw-only" | "math-only"
+  kind      String
+  curated   Boolean  @default(false)
+  /// JSON-encoded AssembledTest.
+  form      String
+
+  /// "in-progress" | "completed" | "abandoned"
+  status    String   @default("in-progress")
+  /// Index into the attempt's module sequence.
+  cursor    Int      @default(0)
+  /// True while the optional break between sections is running.
+  onBreak   Boolean  @default(false)
+  breakEndsAt DateTime?
+
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  /// JSON-encoded routing decisions, keyed by subject.
+  routes        String @default("{}")
+  /// JSON-encoded TotalScore, written once the attempt completes.
+  scoreSnapshot String?
+  scoringVersion String?
+  routingVersion String?
+
+  modules AttemptModule[]
+  answers Answer[]
+  exposures QuestionExposure[]
+
+  @@index([userId, status])
+  @@index([userId, completedAt])
+}
+
+/// A single timed module within an attempt. The deadline is server-authoritative:
+/// a refresh, a closed tab, or a lost connection cannot buy extra time.
+model AttemptModule {
+  id        String   @id @default(cuid())
+  attemptId String
+  attempt   Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  /// Position in the attempt's module sequence (0-based).
+  ordinal   Int
+  /// "rw" | "math"
+  subject   String
+  /// 1 | 2
+  module    Int
+  /// "lower" | "upper", set only for module 2.
+  route     String?
+  durationSeconds Int
+  /// JSON array of question ids, in presentation order.
+  questionIds String
+
+  /// "pending" | "active" | "submitted" | "expired"
+  status    String    @default("pending")
+  startedAt DateTime?
+  endsAt    DateTime?
+  submittedAt DateTime?
+  /// Set when the module ended because the clock ran out rather than by choice.
+  timedOut  Boolean   @default(false)
+
+  answers Answer[]
+
+  @@unique([attemptId, ordinal])
+  @@index([attemptId])
+}
+
+/// One response. A row exists as soon as the test taker interacts with a
+/// question, so flags and time-on-question survive a refresh even when no
+/// answer has been selected.
+model Answer {
+  id         String   @id @default(cuid())
+  attemptId  String
+  attempt    Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  moduleId   String
+  module     AttemptModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  questionId String
+  /// Choice id ("A".."D") or the typed student response. Null means unanswered.
+  given      String?
+  isCorrect  Boolean  @default(false)
+  flagged    Boolean  @default(false)
+  timeSpentMs Int     @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([attemptId, questionId])
+  @@index([moduleId])
+}
+
+/// Per-user question history. Drives "prioritise questions this user has not
+/// seen" during assembly and the repeat-prevention guarantee.
+model QuestionExposure {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  attemptId  String?
+  attempt    Attempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+  seenAt     DateTime @default(now())
+  wasCorrect Boolean?
+
+  @@unique([userId, questionId])
+  @@index([userId])
+  @@index([questionId])
+}
+
+/// Bank-wide usage statistics, used for empirical difficulty and admin review.
+model QuestionStat {
+  questionId  String   @id
+  timesServed Int      @default(0)
+  timesCorrect Int     @default(0)
+  lastServedAt DateTime?
+  updatedAt   DateTime @updatedAt
+}
+
+/// Administrator changes layered over the static bank: an edited question, a
+/// retired question, or a brand-new one. The static bank file is never mutated.
+model QuestionOverride {
+  questionId String   @id
+  /// JSON-encoded Question. Null when the row only retires a question.
+  payload    String?
+  retired    Boolean  @default(false)
+  /// True when the question exists only here and not in the static bank.
+  custom     Boolean  @default(false)
+  note       String?
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@index([retired])
+  @@index([custom])
+}
+
+/// Curated forms built in the admin console, layered over the static catalogue.
+model CuratedForm {
+  id        String   @id
+  title     String
+  kind      String
+  /// JSON-encoded AssembledTest.
+  form      String
+  published Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Scoring configuration, versioned. The active row overrides the compiled-in
+/// default, so scales can be updated without a deploy.
+model ScoringConfig {
+  id        String   @id @default(cuid())
+  version   String   @unique
+  label     String
+  /// JSON-encoded ScoringConfig.
+  payload   String
+  active    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+}
