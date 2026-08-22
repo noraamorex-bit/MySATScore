@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MySATScore — Digital SAT practice</title>
+<meta name="description" content="Full-length adaptive Digital SAT practice tests with realistic timing, scaled scoring, and question-level analytics.">
+<meta property="og:title" content="MySATScore — Digital SAT practice">
+<meta property="og:description" content="Full-length adaptive Digital SAT practice tests with realistic timing, scaled scoring, and question-level analytics.">
+<meta property="og:type" content="website">
+<style>
+/*
+  Standalone landing page for GitHub Pages. The application itself cannot run
+  here — it needs a Node server, API routes, middleware, and a database — so
+  this page introduces it and links to the deployment that can.
+
+  To point it at your deployment, edit the two href values marked APP_URL below.
+*/
+:root {
+  --paper:#f6f6f3; --surface:#fff; --ink:#181b22; --muted:#5b6370; --faint:#8b93a0;
+  --line:#dfe0db; --accent:#1e448f; --accent-soft:#e2eaf9;
+  --sans: ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:#0f1115; --surface:#161921; --ink:#e9ecf1; --muted:#9ca3af; --faint:#717986;
+    --line:#2d333d; --accent:#84a8ee; --accent-soft:#1e293d;
+  }
+}
+*,*::before,*::after { box-sizing:border-box; }
+html { -webkit-text-size-adjust:100%; }
+body {
+  margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans);
+  line-height:1.6; -webkit-font-smoothing:antialiased;
+  padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right);
+}
+a { color:var(--accent); }
+.wrap { max-width:64rem; margin:0 auto; padding:0 1.25rem; }
+header { border-bottom:1px solid var(--line); background:var(--surface); }
+.bar { display:flex; align-items:center; gap:.6rem; height:3.5rem; }
+.bar strong { font-size:.98rem; letter-spacing:-.01em; }
+.bar nav { margin-left:auto; display:flex; gap:.25rem; }
+.bar nav a { padding:.4rem .75rem; border-radius:999px; font-size:.88rem; font-weight:500; color:var(--muted); text-decoration:none; }
+.bar nav a:hover { background:var(--paper); color:var(--ink); }
+main { padding:3.5rem 0 4rem; }
+h1 { font-size:clamp(2rem,6vw,3.1rem); line-height:1.08; letter-spacing:-.025em; margin:.9rem 0 0; max-width:19ch; }
+.lede { font-size:1.06rem; color:var(--muted); max-width:56ch; margin:1.1rem 0 0; }
+.eyebrow {
+  display:inline-block; padding:.3rem .7rem; border-radius:999px; background:var(--accent-soft);
+  color:var(--accent); font-size:.72rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+}
+.cta { display:flex; flex-wrap:wrap; gap:.7rem; margin-top:1.9rem; }
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
+  padding:.72rem 1.35rem; border-radius:999px; font-size:.92rem; font-weight:600;
+  text-decoration:none; border:1px solid transparent; transition:filter .15s, background .15s;
+}
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-primary:hover { filter:brightness(1.12); }
+.btn-ghost { border-color:var(--line); background:var(--surface); color:var(--ink); }
+.btn-ghost:hover { background:var(--paper); }
+.grid { display:grid; gap:.85rem; margin-top:3.25rem; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); }
+.card { background:var(--surface); border:1px solid var(--line); border-radius:.85rem; padding:1.2rem 1.25rem; }
+.card h2 { font-size:.72rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--faint); margin:0; }
+.card p { margin:.5rem 0 0; font-size:.94rem; color:var(--ink); }
+.stats { display:grid; gap:.85rem; margin-top:.85rem; grid-template-columns:repeat(auto-fit,minmax(10rem,1fr)); }
+.stat { background:var(--surface); border:1px solid var(--line); border-radius:.85rem; padding:.9rem 1.1rem; }
+.stat dt { font-size:.7rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+.stat dd { margin:.3rem 0 0; font-size:1.5rem; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+section.detail { margin-top:3.5rem; }
+section.detail h2 { font-size:1.3rem; letter-spacing:-.015em; margin:0 0 .4rem; }
+section.detail p { color:var(--muted); max-width:62ch; margin:0; }
+ul.plain { margin:1.1rem 0 0; padding:0; list-style:none; display:grid; gap:.55rem; max-width:62ch; }
+ul.plain li { padding-left:1.15rem; position:relative; font-size:.95rem; }
+ul.plain li::before { content:"—"; position:absolute; left:0; color:var(--faint); }
+.note {
+  margin-top:2.5rem; border:1px solid var(--line); border-left:3px solid var(--accent);
+  border-radius:.6rem; background:var(--surface); padding:1rem 1.15rem; max-width:62ch;
+}
+.note p { margin:0; font-size:.9rem; color:var(--muted); }
+footer { border-top:1px solid var(--line); margin-top:4rem; padding:1.6rem 0 2.5rem; }
+footer p { margin:0; font-size:.79rem; color:var(--faint); max-width:70ch; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true">
+      <rect x="1" y="1" width="26" height="26" rx="8" fill="var(--accent)"/>
+      <path d="M7.5 18.5 11.5 9.5 14 15l2.5-4 4 8" fill="none" stroke="#fff"
+            stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <strong>MySATScore</strong>
+    <nav>
+      <!-- APP_URL -->
+      <a href="https://YOUR-PROJECT.vercel.app">Open the app</a>
+      <a href="https://github.com/noraamorex-bit/MySATScore">Source</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <span class="eyebrow">Adaptive · Full length · Scaled scoring</span>
+  <h1>Practise the Digital SAT the way it is actually administered.</h1>
+  <p class="lede">
+    Two adaptive Reading and Writing modules, two adaptive Math modules, 98 questions,
+    2 hours 14 minutes of timed testing, and a 10-minute break in between. Your second
+    module is chosen from your first-module performance, exactly as on test day.
+  </p>
+
+  <div class="cta">
+    <!-- APP_URL -->
+    <a class="btn btn-primary" href="https://YOUR-PROJECT.vercel.app">Start a practice test</a>
+    <a class="btn btn-ghost" href="https://github.com/noraamorex-bit/MySATScore">Read the source</a>
+  </div>
+
+  <dl class="stats">
+    <div class="stat"><dt>Questions</dt><dd>1,360</dd></div>
+    <div class="stat"><dt>Curated forms</dt><dd>22</dd></div>
+    <div class="stat"><dt>Per full test</dt><dd>98</dd></div>
+    <div class="stat"><dt>Testing time</dt><dd>2h 14m</dd></div>
+  </dl>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Reading and Writing</h2>
+      <p>2 modules · 27 questions · 32 minutes each</p>
+    </div>
+    <div class="card">
+      <h2>Math</h2>
+      <p>2 modules · 22 questions · 35 minutes each</p>
+    </div>
+    <div class="card">
+      <h2>Question bank</h2>
+      <p>1,360 original questions, never repeated for you</p>
+    </div>
+  </div>
+
+  <section class="detail">
+    <h2>What the practice test does</h2>
+    <p>
+      The goal is that nothing about the experience surprises you on test day except the
+      questions themselves.
+    </p>
+    <ul class="plain">
+      <li>The clock belongs to the server — refreshing, closing the tab, or sleeping the device cannot buy extra time.</li>
+      <li>Module 2 is routed from your module 1 performance by a deterministic, difficulty-weighted policy. Difficulty is never shown during a test.</li>
+      <li>Mark for review, an answer eliminator, a question navigator, and a check-your-work screen before every submission.</li>
+      <li>An on-screen calculator and the formula reference sheet, on Math only.</li>
+      <li>Section scores on the 200–800 scale and a 400–1600 total, with the routed form affecting the conversion.</li>
+      <li>Results by domain, by difficulty, and by skill, with every question reviewable and explained.</li>
+      <li>Missed questions can be retried untimed, without touching your score.</li>
+    </ul>
+  </section>
+
+  <section class="detail">
+    <h2>About the questions</h2>
+    <p>
+      Every question is original, written for this project. No College Board material is
+      reproduced. Each one carries a domain, a skill list, a difficulty, a full explanation,
+      and — where it helps — an analysis of why each wrong answer is tempting.
+    </p>
+  </section>
+
+  <div class="note">
+    <p>
+      <strong>On scoring:</strong> College Board does not publish the tables used to convert a
+      raw score into the 200–800 scale, and the real conversion depends on which second module
+      you received. The scale used here is a documented model that reproduces the behaviour
+      that matters for practice — it is not official data, and scores should be read as a guide
+      rather than a prediction.
+    </p>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>
+      MySATScore is an independent practice platform. SAT is a trademark of the College Board,
+      which is not affiliated with and does not endorse this project.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

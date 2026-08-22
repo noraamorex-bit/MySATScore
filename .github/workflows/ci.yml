@@ -1,0 +1,29 @@
+# Runs the checks that must pass before the app is deployed anywhere.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # The suites run against a throwaway SQLite file, so no service is needed.
+      DATABASE_URL: "file:./ci.db"
+      AUTH_SECRET: "ci-only-secret-at-least-thirty-two-chars"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npx prisma db push --skip-generate
+      # Verifies the bank, the full attempt lifecycle, and the admin surface.
+      - run: npm test
+      - run: npm run build

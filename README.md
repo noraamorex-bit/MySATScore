@@ -44,6 +44,19 @@ else has to change. `npm run db:use-sqlite` switches back.
 
 ---
 
+## Deploying
+
+The app needs a Node server, API routes, middleware, and a database, so
+**GitHub Pages cannot host it** — that is static hosting only. Deploy to
+**Vercel** (or any Node host) with a Postgres database, and optionally publish
+the static landing page in `docs/` to GitHub Pages so the repository's Pages URL
+points people to the real app.
+
+Full steps, including the Postgres setup, the environment variables, and the
+CI workflow: **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+
+---
+
 ## Commands
 
 | Command | What it does |
