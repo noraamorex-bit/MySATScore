@@ -148,7 +148,9 @@ function logs, and confirm you used the pooled connection string.
 
 `docs/index.html` is a self-contained landing page: no build step, no
 dependencies, and it matches the app's design language. It exists so that
-`noraamorex-bit.github.io/MySATScore` is something rather than a 404.
+`noraamorex-bit.github.io/MySATScore` is something rather than a 404. A small
+`index.html` at the repository root redirects to it, so the page is reachable
+whichever way Pages is configured (see step 2).
 
 ## 1. Point it at your Vercel deployment
 
@@ -161,26 +163,45 @@ sed -i 's|https://YOUR-PROJECT.vercel.app|https://your-real-app.vercel.app|g' do
 git add docs/index.html && git commit -m "Point the landing page at the deployment"
 ```
 
-## 2. Enable Pages
+## 2. Make sure Pages is pointed somewhere sensible
 
-In the repository: **Settings → Pages → Build and deployment → Source:
-GitHub Actions.**
+Pages can be configured three ways, and **the landing page works under all
+three** — so there may be nothing to do here at all:
+
+| Settings → Pages → Source | What happens | Anything to do? |
+| --- | --- | --- |
+| **GitHub Actions** | `.github/workflows/pages.yml` publishes `docs/` | Nothing |
+| **Deploy from a branch**, folder `/docs` | `docs/index.html` is served directly | Nothing |
+| **Deploy from a branch**, folder `/ (root)` | the root `index.html` redirects to `docs/` | Nothing |
+
+The root `index.html` and `.nojekyll` exist only for that third case. Under the
+other two they are never reached.
+
+If you want the Actions route specifically — it is the one that redeploys
+automatically whenever `docs/` changes — set **Settings → Pages → Build and
+deployment → Source: GitHub Actions**, and make sure `main` is the repository's
+default branch (**Settings → General → Default branch**).
+
+### If the "Deploy landing page" workflow shows a red X
+
+That workflow can only succeed when Pages source is set to **GitHub Actions**.
+With a branch source it fails immediately — in under a second, with no step
+logs — because the `github-pages` environment refuses the deployment. It is not
+a problem with the page or the build. Either switch the source to GitHub
+Actions, or delete `.github/workflows/pages.yml` and rely on the branch
+deployment, which needs no workflow at all.
 
 ## 3. Publish
 
-`.github/workflows/pages.yml` publishes `docs/` whenever it changes on `main`,
-and can also be run by hand from the **Actions** tab (**Deploy landing page** →
-**Run workflow**). The site appears at:
+With the Actions source, `pages.yml` runs on any push that touches `docs/`, and
+can also be run by hand from the **Actions** tab (**Deploy landing page** →
+**Run workflow**). With a branch source, GitHub rebuilds automatically on push.
+
+Either way the site appears at:
 
 ```
 https://noraamorex-bit.github.io/MySATScore/
 ```
-
-## If you would rather not use Actions
-
-Settings → Pages → Source: **Deploy from a branch**, branch `main`, folder
-`/docs`. Then delete `.github/workflows/pages.yml`. The `docs/.nojekyll` file is
-already there, which stops Jekyll from touching the output.
 
 ---
 
