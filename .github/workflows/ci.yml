@@ -1,4 +1,7 @@
 # Runs the checks that must pass before the app is deployed anywhere.
+#
+# The suites run against a real PostgreSQL service rather than a stand-in, so
+# CI exercises the same database engine production uses.
 name: CI
 
 on:
@@ -10,10 +13,26 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mysatscore
+        ports: ["5432:5432"]
+        # Don't start the job until the database is actually accepting queries.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
-      # The suites run against a throwaway SQLite file, so no service is needed.
-      DATABASE_URL: "file:./ci.db"
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/mysatscore"
       AUTH_SECRET: "ci-only-secret-at-least-thirty-two-chars"
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,3 +46,19 @@ jobs:
       # Verifies the bank, the full attempt lifecycle, and the admin surface.
       - run: npm test
       - run: npm run build
+
+      # prisma/init.sql is what a deployer pastes into their database console,
+      # so it must stay in step with the schema. Regenerate it and fail if the
+      # committed copy has drifted.
+      - name: Check prisma/init.sql is up to date
+        run: |
+          npx prisma migrate diff \
+            --from-empty --to-schema-datamodel prisma/schema.prisma --script \
+            > /tmp/init.generated.sql
+          strip() { grep -v '^--' "$1" | grep -v '^[[:space:]]*$'; }
+          if ! diff <(strip prisma/init.sql) <(strip /tmp/init.generated.sql) > /dev/null; then
+            echo "prisma/init.sql is out of date. Regenerate it with:"
+            echo "  npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script"
+            exit 1
+          fi
+          echo "prisma/init.sql matches the schema."

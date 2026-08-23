@@ -15,32 +15,36 @@ question bank, and the scoring model are entirely this project's own.
 
 ```bash
 npm install
-cp .env.example .env      # optional; sensible defaults are already committed
+npm run db:use-sqlite     # local mode: a file-based database, no server needed
+cp .env.example .env      # then set DATABASE_URL="file:./dev.db"
 npm run setup             # generate the client, create the database, seed it
 npm run dev               # http://localhost:3000
 ```
 
-`npm run setup` uses SQLite and needs no external services. The bundled question
-bank (1,360 questions) and curated test catalogue (22 forms) are committed, so
-the app is fully usable the moment it starts — no import step, no placeholder
-content.
+The committed schema targets **PostgreSQL**, because that is what the app
+deploys onto. `npm run db:use-sqlite` switches it to a local file for
+development, and `npm run db:use-postgres` switches it back — the models use
+types that are portable across both, so nothing else changes.
+
+The bundled question bank (1,360 questions) and curated test catalogue (22
+forms) are committed, so the app is fully usable the moment it starts — no
+import step, no placeholder content.
 
 The seeded administrator is `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env`
 (`admin@mysatscore.local` / `admin12345` by default). **Change these before
 deploying anywhere.**
 
-### Using PostgreSQL or Supabase
+### Running against PostgreSQL locally
 
 ```bash
-npm run db:use-postgres                 # rewrites the Prisma datasource
-# set DATABASE_URL in .env, e.g.
-# DATABASE_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT].supabase.co:5432/postgres"
+npm run db:use-postgres
+# DATABASE_URL="postgresql://postgres:postgres@localhost:5432/mysatscore"
 npm run setup
 ```
 
-Every model uses types that are portable across both engines, and structured
-values are stored as JSON strings rather than native JSON columns, so nothing
-else has to change. `npm run db:use-sqlite` switches back.
+`prisma/init.sql` is the schema as plain SQL, for pasting into a hosted
+provider's console when you cannot run Prisma against it. CI regenerates it and
+fails if it has drifted from `schema.prisma`.
 
 ---
 

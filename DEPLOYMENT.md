@@ -116,43 +116,29 @@ password — anyone with it can read your database.
 
 ---
 
-# Step 2 — Change one word in the code
+# Step 2 — Change one word in the code ✅ ALREADY DONE
 
-The code currently says "use a simple local database file", which is right for
-working on your own computer but will not work on a real server. You are
-changing it to say "use PostgreSQL", which is what Supabase provides.
+**You can skip this step.** It has been done for you and is already on `main`.
 
-You can do this entirely on the GitHub website.
+For reference, this is what it was: the code has to be told which kind of
+database it is talking to. `prisma/schema.prisma` line 14 now reads
 
-1. Go to
-   <https://github.com/noraamorex-bit/MySATScore/blob/main/prisma/schema.prisma>
-2. Click the **pencil icon** (Edit this file) near the top right.
-3. Find **line 14**. It looks like this:
+```prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+```
 
-   ```prisma
-   datasource db {
-     provider = "sqlite"
-     url      = env("DATABASE_URL")
-   }
-   ```
+where it previously said `"sqlite"`. Prisma will not accept this as a setting —
+it has to be written in the file — which is why it is a code change rather than
+another environment variable.
 
-4. Change `"sqlite"` to `"postgresql"` so it reads:
-
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
-   ```
-
-   > ⚠️ **Do not touch line 10**, which says `provider = "prisma-client-js"`.
-   > That is a different setting and changing it will break the build. You are
-   > only changing the one inside the block that starts with `datasource db {`.
-
-5. Scroll down, click **Commit changes...**, then **Commit changes** in the
-   dialog. Leave the defaults as they are.
-
-That is the only code change you need to make.
+> **If you want to run the app on your own computer later**, run
+> `npm run db:use-sqlite` first. That switches it back to a simple local file so
+> you do not need a database server. `npm run db:use-postgres` switches it
+> forward again before you deploy. Don't commit the SQLite setting to `main`, or
+> the next deployment will fail.
 
 ---
 
@@ -301,7 +287,7 @@ service will charge you without you explicitly upgrading.
 | Site loads but every page shows an error | `DATABASE_URL` is wrong. Check you replaced `[YOUR-PASSWORD]`, used the **Transaction pooler** string (port 6543), and added `?pgbouncer=true&connection_limit=1`. |
 | Errors that come and go at random | You probably used the *Direct connection* string instead of the pooler. |
 | `relation "User" does not exist` | Step 1.2 did not run. Go back to the Supabase SQL Editor and run `prisma/init.sql`. |
-| Build fails mentioning Prisma or `sqlite` | Step 2 was missed, or the wrong `provider` line was edited. Check line 14, and that line 10 still says `prisma-client-js`. |
+| Build fails mentioning Prisma or `sqlite` | Something switched `prisma/schema.prisma` back to SQLite. Line 14 must say `"postgresql"`; line 10 must still say `"prisma-client-js"`. |
 | No **Admin** link after registering | The registered email does not exactly match `ADMIN_EMAIL`. |
 
 **Where to read the actual error:** Vercel → your project → **Deployments** →
@@ -313,17 +299,13 @@ always in the last few red lines.
 
 # Appendix A — Doing it from a terminal instead
 
-If you are comfortable with a command line, this replaces Steps 1.2, 2 and 4.
+If you are comfortable with a command line, this replaces Steps 1.2 and 4.
 You need [Node.js 20+](https://nodejs.org) and Git.
 
 ```bash
 git clone https://github.com/noraamorex-bit/MySATScore.git
 cd MySATScore
 npm install
-
-# Point the schema at PostgreSQL (this is Step 2)
-npm run db:use-postgres
-git commit -am "Use PostgreSQL for deployment" && git push
 
 # Create the tables and the admin account (Steps 1.2 and 4)
 export DATABASE_URL="postgresql://...your pooled string..."
