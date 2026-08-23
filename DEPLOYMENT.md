@@ -131,7 +131,47 @@ another environment variable.
 
 # Step 3 — Put the app online
 
-### 3.1 Import the project
+There are two ways. **3A is much easier on a phone**, and lets someone else (or
+Claude) run the deployment for you.
+
+## 3A — Let GitHub Actions deploy it *(recommended on mobile)*
+
+You store two secrets once; a workflow does everything else and can be re-run
+any time.
+
+1. **Get a Vercel token.** Sign in at [vercel.com](https://vercel.com) with
+   GitHub, then go to
+   [vercel.com/account/tokens](https://vercel.com/account/tokens) → **Create
+   Token** → name it `github-actions`, scope *Full Account*, no expiry (or a
+   long one) → **Create** → tap **Copy**.
+
+2. **Store it, plus the database string.** In this repository go to
+   **Settings → Secrets and variables → Actions → New repository secret** and
+   add:
+
+   | Secret name | Value |
+   | --- | --- |
+   | `VERCEL_TOKEN` | the token you just copied |
+   | `DATABASE_URL` | the connection string from Step 1.3, pasted as-is |
+   | `DATABASE_PASSWORD` | your database password — only if you left `[YOUR-PASSWORD]` in the string |
+
+3. **Run it.** Go to the **Actions** tab → **Deploy to Vercel** → **Run
+   workflow** → type the email address that should become the administrator →
+   **Run workflow**.
+
+The workflow creates the Vercel project, generates and stores an `AUTH_SECRET`
+(once — later runs leave it alone so nobody gets logged out), sets the
+environment variables, deploys, and then fetches the live URL to confirm the
+site actually serves the app rather than just building. The URL appears in the
+run summary.
+
+Nothing here needs a computer, and each secret is a single paste.
+
+## 3B — Import it in the Vercel dashboard yourself
+
+
+
+### Import the project
 
 1. Go to <https://vercel.com/new>.
 2. Find **MySATScore** in the list of your GitHub repositories and click
@@ -140,7 +180,7 @@ another environment variable.
 3. Vercel detects that this is a Next.js app. **Leave every build setting
    alone** — the defaults are correct.
 
-### 3.2 Add three settings
+### Add the settings
 
 Before deploying, open the **Environment Variables** section and add these three.
 For each one: type the name, paste the value, click **Add**.
@@ -175,14 +215,14 @@ right — you cannot easily change who is admin afterwards.
 > The app deliberately refuses to start if `AUTH_SECRET` is missing or too
 > short. If your first deployment fails, this is the most likely reason.
 
-### 3.3 Deploy
+### Deploy
 
 Click **Deploy**. It takes roughly two minutes.
 
 When it finishes you get a link like `https://mysatscore-xyz123.vercel.app`.
 Click it. **Your site is live.**
 
-### 3.4 Check it worked
+## Step 3 check — did it work?
 
 Open your new site and confirm:
 

@@ -1,0 +1,136 @@
+# Deploys the app to Vercel from GitHub Actions.
+#
+# This exists because the deployment steps are hard to carry out on a phone.
+# Everything here runs on GitHub's runners, so the only manual work is storing
+# two secrets once; the workflow does the rest and can be re-run at any time.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   VERCEL_TOKEN      a Vercel access token (vercel.com/account/tokens)
+#   DATABASE_URL      the pooled Postgres connection string
+#
+# Optional:
+#   DATABASE_PASSWORD if you left [YOUR-PASSWORD] in DATABASE_URL
+#
+# AUTH_SECRET is generated on the first run and then left alone, so signed-in
+# users are not logged out by later deployments.
+name: Deploy to Vercel
+
+on:
+  workflow_dispatch:
+    inputs:
+      admin_email:
+        description: "Email that becomes the site administrator when it registers"
+        required: true
+        type: string
+      project_name:
+        description: "Vercel project name"
+        required: false
+        default: "mysatscore"
+        type: string
+
+concurrency:
+  group: vercel-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TELEMETRY_DISABLED: "1"
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      PROJECT: ${{ inputs.project_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the required secrets are present
+        run: |
+          missing=0
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN is not set. Create a token at https://vercel.com/account/tokens and add it under Settings -> Secrets and variables -> Actions."
+            missing=1
+          fi
+          if [ -z "${{ secrets.DATABASE_URL }}" ]; then
+            echo "::error::DATABASE_URL is not set. Copy the pooled connection string from your database provider and add it as a repository secret."
+            missing=1
+          fi
+          [ "$missing" -eq 0 ] || exit 1
+          echo "Required secrets are present."
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install -g vercel@48
+
+      - name: Create or link the Vercel project
+        run: |
+          vercel link --yes --project "$PROJECT" --token "$VERCEL_TOKEN"
+          echo "Linked to project: $PROJECT"
+
+      # Written once and then preserved: regenerating it on every deploy would
+      # invalidate everyone's session cookies.
+      - name: Ensure AUTH_SECRET exists
+        run: |
+          if vercel env ls production --token "$VERCEL_TOKEN" 2>/dev/null | grep -qw AUTH_SECRET; then
+            echo "AUTH_SECRET already set; leaving it as it is."
+          else
+            echo "Generating AUTH_SECRET."
+            node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64url'))" \
+              | vercel env add AUTH_SECRET production --token "$VERCEL_TOKEN" --sensitive
+          fi
+
+      - name: Set the environment variables
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          ADMIN_EMAIL: ${{ inputs.admin_email }}
+        run: |
+          set_var() {
+            name="$1"; value="$2"; extra="$3"
+            [ -n "$value" ] || { echo "  $name: not provided, skipping"; return; }
+            printf '%s' "$value" \
+              | vercel env add "$name" production --token "$VERCEL_TOKEN" --force $extra
+            echo "  $name: set"
+          }
+          set_var DATABASE_URL      "$DATABASE_URL"      "--sensitive"
+          set_var DATABASE_PASSWORD "$DATABASE_PASSWORD" "--sensitive"
+          set_var ADMIN_EMAIL       "$ADMIN_EMAIL"       ""
+
+      - name: Deploy
+        id: deploy
+        run: |
+          url=$(vercel deploy --prod --yes --token "$VERCEL_TOKEN" | tail -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $url"
+
+      # A deployment that builds but does not serve is not a success.
+      - name: Check the site actually responds
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /tmp/body.html -w "%{http_code}" -L --max-time 30 "$url" || echo 000)
+            echo "attempt $attempt: HTTP $code"
+            if [ "$code" = "200" ]; then
+              if grep -q "Digital SAT" /tmp/body.html; then
+                echo "The site is live and serving the app."
+                exit 0
+              fi
+              echo "::warning::200 received but the page did not look like the app."
+            fi
+            sleep 10
+          done
+          echo "::error::The deployment did not serve a working page. Check the Vercel runtime logs."
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Deployment"
+            echo ""
+            echo "**URL:** ${{ steps.deploy.outputs.url }}"
+            echo ""
+            echo "Next: open the URL, choose **Create account**, and register with"
+            echo "\`${{ inputs.admin_email }}\` to become the administrator."
+          } >> "$GITHUB_STEP_SUMMARY"
