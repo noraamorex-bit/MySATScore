@@ -48,12 +48,18 @@ else has to change. `npm run db:use-sqlite` switches back.
 
 The app needs a Node server, API routes, middleware, and a database, so
 **GitHub Pages cannot host it** — that is static hosting only. Deploy to
-**Vercel** (or any Node host) with a Postgres database, and optionally publish
-the static landing page in `docs/` to GitHub Pages so the repository's Pages URL
-points people to the real app.
+**Vercel** (or any Node host) with a Postgres database.
 
-Full steps, including the Postgres setup, the environment variables, and the
-CI workflow: **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+**[DEPLOYMENT.md](DEPLOYMENT.md) is a click-by-click walkthrough that assumes no
+prior experience and needs only a web browser** — no terminal, nothing to
+install. It takes about 20 minutes on free tiers: create a Supabase database and
+run `prisma/init.sql` in its SQL editor, change one word in
+`prisma/schema.prisma`, import the repository into Vercel with three environment
+variables, then register on your live site with the address you set as
+`ADMIN_EMAIL` to become the administrator. A terminal version is in Appendix A.
+
+Optionally, the static landing page in `docs/` publishes to GitHub Pages so the
+repository's Pages URL points people to the real app.
 
 ---
 

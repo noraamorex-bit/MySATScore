@@ -1,240 +1,378 @@
-# Deploying MySATScore
+# Getting MySATScore online
 
-## Read this first: what can host what
+This guide assumes you have never deployed anything before. It uses **only a web
+browser** — nothing to install, no command line, no coding.
 
-MySATScore is a **server application**, not a static site. It needs:
-
-- a Node server (React Server Components, server actions)
-- API route handlers (`/api/attempt/...`)
-- middleware (issues the signed session cookie on every request)
-- a persistent database (attempts, answers, per-user question exposure)
-
-That rules out **GitHub Pages**, which serves static files and nothing else.
-There is no configuration that makes it work: exporting the app statically
-(`output: "export"`) would strip the API routes, the middleware, and every
-server component — which is essentially the whole application.
-
-So the two hosts do different jobs:
-
-| Host | What it serves |
-| --- | --- |
-| **Vercel** | The application. This is the real deployment. |
-| **GitHub Pages** | *(optional)* A static landing page in `docs/` that links to the Vercel app. |
-
-If you only want one, deploy to Vercel and skip Part 2.
+**Time:** about 20–30 minutes.
+**Cost:** free. Every service used here has a free tier that is plenty for this.
 
 ---
 
-# Part 1 — Vercel (the application)
+## What you are about to do, in plain English
 
-You need a Postgres database. SQLite will not work: Vercel's filesystem is
-ephemeral and read-only at runtime, so a `.db` file would be wiped on every
-deploy and would not be shared between serverless instances.
+The app is a **program**, not a set of files. It has to run somewhere that can
+execute code and remember things. So there are three pieces:
 
-## 1. Create a Postgres database
+| Piece | What it does | Who provides it |
+| --- | --- | --- |
+| **The code** | Already written, already on GitHub | GitHub (done) |
+| **A database** | Remembers users, tests, answers, scores | **Supabase** |
+| **A server** | Runs the code and serves the website | **Vercel** |
 
-Any hosted Postgres works. Two easy options:
+You will create the database, tell the code to use that kind of database, and
+then point Vercel at your GitHub repository. Vercel does the rest automatically.
 
-**Supabase** — create a project, then Project Settings → Database → Connection
-string → **Transaction pooler** (port `6543`).
+> **Why not GitHub Pages?** GitHub Pages can only serve fixed files — pictures,
+> text, plain web pages. It cannot run a program or store anything. This app
+> does both. GitHub Pages is used at the very end, optionally, for a simple
+> welcome page that links to the real app.
 
-**Neon** — create a project and copy the **pooled** connection string.
+---
 
-You want the *pooled* connection string, not the direct one. Serverless
-functions open a connection per invocation and will exhaust a direct Postgres
-connection limit quickly. Append Prisma's pooling hints if they are not already
-present:
+## Before you start
 
-```
-postgresql://USER:PASSWORD@HOST:6543/postgres?pgbouncer=true&connection_limit=1
-```
+Create these three free accounts if you do not have them. Signing in to all of
+them with the **same GitHub account** makes everything simpler.
 
-## 2. Switch the Prisma datasource to Postgres and commit
+1. **GitHub** — you already have this (`noraamorex-bit`).
+2. **Supabase** — <https://supabase.com> → *Start your project* → sign in with GitHub.
+3. **Vercel** — <https://vercel.com/signup> → *Continue with GitHub*.
 
-The repo ships with SQLite so `npm run setup` works with zero configuration.
-Switch it before deploying:
+Nothing asks for a credit card.
+
+---
+
+# Step 1 — Create the database
+
+### 1.1 Make a Supabase project
+
+1. Go to <https://supabase.com/dashboard> and click **New project**.
+2. Fill in:
+   - **Name:** `mysatscore`
+   - **Database Password:** click **Generate a password**, then **copy it and
+     save it somewhere safe.** You need it in a minute and Supabase will not
+     show it again.
+   - **Region:** pick the one closest to you.
+3. Click **Create new project** and wait 1–2 minutes while it sets up.
+
+### 1.2 Create the tables
+
+The database starts completely empty. This step creates the nine tables the app
+needs.
+
+1. In your GitHub repository, open this file:
+   **`prisma/init.sql`**
+   (or go straight to
+   <https://github.com/noraamorex-bit/MySATScore/blob/main/prisma/init.sql>)
+2. Click the **Copy raw file** button (the small copy icon at the top right of
+   the file).
+3. Back in Supabase, click **SQL Editor** in the left sidebar, then
+   **New query**.
+4. Paste everything into the big text box.
+5. Click **Run** (or press Ctrl+Enter / Cmd+Enter).
+
+You should see **Success. No rows returned.** That is what success looks like
+here — it created tables rather than fetching anything.
+
+To check: click **Table Editor** in the sidebar. You should see nine tables:
+`User`, `Attempt`, `AttemptModule`, `Answer`, `QuestionExposure`,
+`QuestionStat`, `QuestionOverride`, `CuratedForm`, `ScoringConfig`.
+
+### 1.3 Copy the connection string
+
+This is the address and password the app uses to reach your database.
+
+1. In Supabase, click **Connect** at the top of the page (on some versions it is
+   *Project Settings → Database → Connection string*).
+2. You will see several options. Choose **Transaction pooler**.
+
+   > **This choice matters.** Vercel runs your app in many short-lived copies,
+   > each opening its own database connection. The "Direct connection" option
+   > would run out of connections quickly and the site would start failing. The
+   > transaction pooler is built for exactly this. It uses port **6543**.
+
+3. Copy the string. It looks like this:
+
+   ```
+   postgresql://postgres.abcdefghijkl:[YOUR-PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres
+   ```
+
+4. Replace `[YOUR-PASSWORD]` — including the square brackets — with the database
+   password you saved in step 1.1.
+
+5. Add this to the very end, exactly as written:
+
+   ```
+   ?pgbouncer=true&connection_limit=1
+   ```
+
+   So the finished string ends with `.../postgres?pgbouncer=true&connection_limit=1`.
+
+   > **Why:** it tells the app it is talking through a pooler, so it adjusts how
+   > it sends queries. Without it you will get intermittent errors.
+
+**Save this whole string in a note.** You need it in Step 3. Treat it like a
+password — anyone with it can read your database.
+
+---
+
+# Step 2 — Change one word in the code
+
+The code currently says "use a simple local database file", which is right for
+working on your own computer but will not work on a real server. You are
+changing it to say "use PostgreSQL", which is what Supabase provides.
+
+You can do this entirely on the GitHub website.
+
+1. Go to
+   <https://github.com/noraamorex-bit/MySATScore/blob/main/prisma/schema.prisma>
+2. Click the **pencil icon** (Edit this file) near the top right.
+3. Find **line 14**. It looks like this:
+
+   ```prisma
+   datasource db {
+     provider = "sqlite"
+     url      = env("DATABASE_URL")
+   }
+   ```
+
+4. Change `"sqlite"` to `"postgresql"` so it reads:
+
+   ```prisma
+   datasource db {
+     provider = "postgresql"
+     url      = env("DATABASE_URL")
+   }
+   ```
+
+   > ⚠️ **Do not touch line 10**, which says `provider = "prisma-client-js"`.
+   > That is a different setting and changing it will break the build. You are
+   > only changing the one inside the block that starts with `datasource db {`.
+
+5. Scroll down, click **Commit changes...**, then **Commit changes** in the
+   dialog. Leave the defaults as they are.
+
+That is the only code change you need to make.
+
+---
+
+# Step 3 — Put the app online
+
+### 3.1 Import the project
+
+1. Go to <https://vercel.com/new>.
+2. Find **MySATScore** in the list of your GitHub repositories and click
+   **Import**. If you do not see it, click **Adjust GitHub App Permissions** and
+   grant Vercel access to the repository.
+3. Vercel detects that this is a Next.js app. **Leave every build setting
+   alone** — the defaults are correct.
+
+### 3.2 Add three settings
+
+Before deploying, open the **Environment Variables** section and add these three.
+For each one: type the name, paste the value, click **Add**.
+
+| Name | Value |
+| --- | --- |
+| `DATABASE_URL` | the full connection string from Step 1.3 |
+| `AUTH_SECRET` | a long random string — see below |
+| `ADMIN_EMAIL` | the email address you will use to manage questions |
+
+**About `AUTH_SECRET`:** this is a private key the app uses to sign login
+cookies, so nobody can forge being logged in as someone else. It must be at
+least 16 characters; 40 or more is better. It is never shown to anyone.
+
+To make one, either:
+- use your password manager's "generate password" feature and ask for 40+
+  characters, or
+- use the password generator built into Chrome, Safari, or Firefox, or
+- genuinely mash your keyboard for 40+ characters of letters and digits.
+
+Do not use a real word, and do not reuse a password you use elsewhere.
+
+**About `ADMIN_EMAIL`:** whoever registers on your site with this exact email
+address automatically becomes the administrator. Use your own email, and get it
+right — you cannot easily change who is admin afterwards.
+
+> The app deliberately refuses to start if `AUTH_SECRET` is missing or too
+> short. If your first deployment fails, this is the most likely reason.
+
+### 3.3 Deploy
+
+Click **Deploy**. It takes roughly two minutes.
+
+When it finishes you get a link like `https://mysatscore-xyz123.vercel.app`.
+Click it. **Your site is live.**
+
+### 3.4 Check it worked
+
+Open your new site and confirm:
+
+- The home page loads and describes the test.
+- **Practice** lists 22 ready-made tests.
+- Click **Begin test** → you get a directions screen → **Begin Module 1** starts
+  a countdown.
+- Answer a couple of questions and use **Back** and **Next**.
+
+You do not need to finish the test to know it works.
+
+---
+
+# Step 4 — Make yourself the administrator
+
+There is no separate setup for this and nothing to run.
+
+1. On your live site, click **Create account**.
+2. Register using **exactly** the email you put in `ADMIN_EMAIL`.
+3. Choose a strong password of your own.
+
+Once registered, an **Admin** link appears in the top navigation. From there you
+can add, edit, retire, and replace questions, import and export them, build new
+fixed tests, see which questions are being answered correctly, and update the
+scoring tables.
+
+If the Admin link does not appear, the email did not match. Check for typos or
+extra spaces in the Vercel setting, correct it, and see "Changing a setting
+later" below.
+
+---
+
+# Step 5 — The welcome page on GitHub Pages *(optional)*
+
+This is genuinely optional. It gives `noraamorex-bit.github.io/MySATScore` a
+simple page describing the app with a button through to your Vercel site,
+instead of a "404 not found".
+
+1. Go to
+   <https://github.com/noraamorex-bit/MySATScore/blob/main/docs/index.html>
+2. Click the **pencil icon** to edit.
+3. Press Ctrl+F (Cmd+F on a Mac) and search for `YOUR-PROJECT`. There are
+   **two** places that say:
+
+   ```
+   https://YOUR-PROJECT.vercel.app
+   ```
+
+4. Replace both with your real Vercel address from Step 3.3.
+5. **Commit changes.**
+
+Then turn Pages on: in your repository go to **Settings → Pages**. Under *Build
+and deployment*, set **Source** to **Deploy from a branch**, choose branch
+**`main`**, and click **Save**. Wait a minute or two, then visit
+<https://noraamorex-bit.github.io/MySATScore/>.
+
+The page is set up to work whichever folder option you pick, so you do not need
+to think about that setting.
+
+---
+
+# Keeping it running
+
+### Changing a setting later
+
+Vercel → your project → **Settings → Environment Variables**. Edit the value,
+save, then go to the **Deployments** tab, open the most recent deployment, and
+choose **Redeploy**. Environment variables are only read when the app starts, so
+a redeploy is required for a change to take effect.
+
+### Changing the code
+
+Any change you commit to the `main` branch on GitHub deploys automatically
+within a couple of minutes. There is nothing to click.
+
+### Your data
+
+Everything users do lives in your Supabase database, not in Vercel. Redeploying
+never affects it. Supabase pauses free projects after a period of inactivity —
+you resume them from the dashboard with one click and nothing is lost.
+
+### Costs
+
+The free tiers cover a personal or small-classroom project comfortably. Neither
+service will charge you without you explicitly upgrading.
+
+---
+
+# If something goes wrong
+
+| What you see | What it usually means |
+| --- | --- |
+| Deployment fails, log mentions `AUTH_SECRET` | The secret is missing or shorter than 16 characters. Fix it in Environment Variables and redeploy. |
+| Site loads but every page shows an error | `DATABASE_URL` is wrong. Check you replaced `[YOUR-PASSWORD]`, used the **Transaction pooler** string (port 6543), and added `?pgbouncer=true&connection_limit=1`. |
+| Errors that come and go at random | You probably used the *Direct connection* string instead of the pooler. |
+| `relation "User" does not exist` | Step 1.2 did not run. Go back to the Supabase SQL Editor and run `prisma/init.sql`. |
+| Build fails mentioning Prisma or `sqlite` | Step 2 was missed, or the wrong `provider` line was edited. Check line 14, and that line 10 still says `prisma-client-js`. |
+| No **Admin** link after registering | The registered email does not exactly match `ADMIN_EMAIL`. |
+
+**Where to read the actual error:** Vercel → your project → **Deployments** →
+click the failed one → **Build Logs** for build failures, or the **Logs** tab
+for errors that happen while people use the site. The real reason is almost
+always in the last few red lines.
+
+---
+
+# Appendix A — Doing it from a terminal instead
+
+If you are comfortable with a command line, this replaces Steps 1.2, 2 and 4.
+You need [Node.js 20+](https://nodejs.org) and Git.
 
 ```bash
+git clone https://github.com/noraamorex-bit/MySATScore.git
+cd MySATScore
+npm install
+
+# Point the schema at PostgreSQL (this is Step 2)
 npm run db:use-postgres
-git add prisma/schema.prisma
-git commit -m "Use PostgreSQL for deployment"
-git push
-```
+git commit -am "Use PostgreSQL for deployment" && git push
 
-Every model already uses portable types, so nothing else changes. (`npm run
-db:use-sqlite` switches back for local work.)
+# Create the tables and the admin account (Steps 1.2 and 4)
+export DATABASE_URL="postgresql://...your pooled string..."
+npx prisma db push
+ADMIN_EMAIL="you@example.com" ADMIN_PASSWORD="something-long" npm run seed
 
-## 3. Create the schema and seed it, once, from your machine
-
-Do this **before** the first Vercel deploy, pointing at the production database:
-
-```bash
-DATABASE_URL="postgresql://...pooled-url..." npx prisma db push
-DATABASE_URL="postgresql://...pooled-url..." \
-ADMIN_EMAIL="you@example.com" \
-ADMIN_PASSWORD="a-long-password-you-choose" \
-  npm run seed
-```
-
-`db push` creates the tables. `seed` creates the administrator account and
-records the built-in scoring configuration as the active version. The question
-bank is committed to the repo as JSON, so there is nothing else to load — the
-app has all 1,360 questions the moment it starts.
-
-Running this locally rather than in the Vercel build keeps schema changes
-deliberate: a build should never be able to alter your production schema by
-accident.
-
-## 4. Generate an AUTH_SECRET
-
-Session cookies are signed with it, and the app **refuses to start in
-production** if it is missing or shorter than 16 characters — by design.
-
-```bash
+# Generate an AUTH_SECRET
 node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 ```
 
-## 5. Import the project into Vercel
-
-1. [vercel.com/new](https://vercel.com/new) → import `noraamorex-bit/MySATScore`.
-2. Framework preset: **Next.js** (detected automatically).
-3. Leave Build Command, Output Directory, and Install Command on their defaults.
-   The `build` script already runs `prisma generate` before `next build`, which
-   is what keeps a cached Vercel build from shipping a stale Prisma client.
-4. Add **Environment Variables** — set each for Production, Preview, and
-   Development:
-
-   | Name | Value |
-   | --- | --- |
-   | `DATABASE_URL` | your pooled Postgres connection string |
-   | `AUTH_SECRET` | the value from step 4 |
-   | `ADMIN_EMAIL` | the email you seeded |
-   | `ADMIN_PASSWORD` | only read by the seed script; safe to omit here |
-
-5. **Deploy.**
-
-## 6. Check it
-
-Open the deployment and confirm:
-
-- `/` loads and you get a session cookie (`mss_session`) as a guest
-- `/practice` lists 22 curated forms
-- start a test → the module directions screen appears → **Begin** starts the timer
-- answer a few, submit the module → module 2 is routed
-- `/about` shows the bank size and the active scoring configuration
-- sign in with your seeded admin email at `/login`, then `/admin` loads
-
-If `/` returns a 500, it is almost always `DATABASE_URL` — check the Vercel
-function logs, and confirm you used the pooled connection string.
-
-## Notes
-
-- **Preview deployments share the production database** unless you give the
-  Preview environment its own `DATABASE_URL`. For a real project, create a
-  second database and set it on Preview only.
-- **Change the seeded admin password** if you used the default from
-  `.env.example`.
-- **Updating the question bank:** edit or add templates under
-  `content/generators/`, run `npm run bank:build && npm run bank:verify`, commit
-  the regenerated `content/bank/questions.json` and `content/curated/tests.json`,
-  and push. Vercel redeploys; no database migration is involved, because the
-  bank is a committed data file rather than table rows.
-- **Admin edits** (from `/admin`) are stored in the database as an overlay, so
-  they survive redeploys and never touch the committed bank file.
-
----
-
-# Part 2 — GitHub Pages (optional landing page)
-
-`docs/index.html` is a self-contained landing page: no build step, no
-dependencies, and it matches the app's design language. It exists so that
-`noraamorex-bit.github.io/MySATScore` is something rather than a 404. A small
-`index.html` at the repository root redirects to it, so the page is reachable
-whichever way Pages is configured (see step 2).
-
-## 1. Point it at your Vercel deployment
-
-Open `docs/index.html` and replace both occurrences of
-`https://YOUR-PROJECT.vercel.app` with your real URL. They are marked with an
-`<!-- APP_URL -->` comment:
+To run it on your own machine with no database at all:
 
 ```bash
-sed -i 's|https://YOUR-PROJECT.vercel.app|https://your-real-app.vercel.app|g' docs/index.html
-git add docs/index.html && git commit -m "Point the landing page at the deployment"
+npm run db:use-sqlite   # if you switched it
+npm run setup           # creates a local file-based database and seeds it
+npm run dev             # http://localhost:3000
 ```
 
-## 2. Make sure Pages is pointed somewhere sensible
+Useful commands:
 
-Pages can be configured three ways, and **the landing page works under all
-three** — so there may be nothing to do here at all:
+| Command | What it does |
+| --- | --- |
+| `npm test` | Bank checks, full test-lifecycle checks, admin checks |
+| `npm run bank:build` | Rebuild the question bank from its source templates |
+| `npm run bank:verify` | Validate every question and every curated test |
+| `npm run db:studio` | Browse the database in a local web UI |
 
-| Settings → Pages → Source | What happens | Anything to do? |
-| --- | --- | --- |
-| **GitHub Actions** | `.github/workflows/pages.yml` publishes `docs/` | Nothing |
-| **Deploy from a branch**, folder `/docs` | `docs/index.html` is served directly | Nothing |
-| **Deploy from a branch**, folder `/ (root)` | the root `index.html` redirects to `docs/` | Nothing |
+After changing `prisma/schema.prisma`, regenerate `prisma/init.sql` with:
 
-The root `index.html` and `.nojekyll` exist only for that third case. Under the
-other two they are never reached.
-
-If you want the Actions route specifically — it is the one that redeploys
-automatically whenever `docs/` changes — set **Settings → Pages → Build and
-deployment → Source: GitHub Actions**, and make sure `main` is the repository's
-default branch (**Settings → General → Default branch**).
-
-### If the "Deploy landing page" workflow shows a red X
-
-That workflow can only succeed when Pages source is set to **GitHub Actions**.
-With a branch source it fails immediately — in under a second, with no step
-logs — because the `github-pages` environment refuses the deployment. It is not
-a problem with the page or the build. Either switch the source to GitHub
-Actions, or delete `.github/workflows/pages.yml` and rely on the branch
-deployment, which needs no workflow at all.
-
-## 3. Publish
-
-With the Actions source, `pages.yml` runs on any push that touches `docs/`, and
-can also be run by hand from the **Actions** tab (**Deploy landing page** →
-**Run workflow**). With a branch source, GitHub rebuilds automatically on push.
-
-Either way the site appears at:
-
-```
-https://noraamorex-bit.github.io/MySATScore/
+```bash
+npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script
 ```
 
 ---
 
-# Continuous integration
+# Appendix B — Automated checks
 
-`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+`.github/workflows/ci.yml` runs on every push to `main`: type checking, linting,
+the question-bank verification, the full test-lifecycle suite (85 checks,
+including timer expiry and page-refresh behaviour), the admin suite (22 checks),
+and a production build. It uses a temporary throwaway database, so it needs no
+secrets and no setup. You can watch it in the repository's **Actions** tab.
 
-```
-typecheck → lint → prisma db push (throwaway SQLite) → npm test → next build
-```
+# Appendix C — Other hosts
 
-`npm test` is bank verification, the full attempt-lifecycle suite (85 checks,
-including timer expiry and refresh edge cases), and the admin suite (22 checks).
-It uses a temporary SQLite file, so CI needs no database service and no secrets.
+Anything that can run a Node.js server works — Railway, Render, Fly.io, or your
+own machine with Docker. Build with `npm run build`, start with `npm start`, and
+set the same three environment variables.
 
-Connect the repository to Vercel and you can require this workflow to pass
-before a production deploy: **Settings → Git → Ignored Build Step**, or protect
-`main` with a required status check.
-
----
-
-# Other hosts
-
-Anything that runs a Node server works, since the app has no Vercel-specific
-code:
-
-- **Railway / Render / Fly.io** — build with `npm run build`, start with
-  `npm start`, set the same environment variables. These give you a persistent
-  filesystem, so SQLite is viable for a single instance, though Postgres is
-  still the better choice.
-- **Docker** — `npm ci && npm run build`, then `npm start` on port 3000.
-- **Netlify** — works via the Next.js runtime, with the same Postgres
-  requirement.
-
-`output: "export"` is the one thing that will never work. The app is a server
-application, and that is the point.
+The one thing that will never work is a static-file host such as GitHub Pages,
+Netlify Drop, or an S3 bucket on its own. This is a program, not a folder of
+pages.
