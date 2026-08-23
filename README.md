@@ -44,8 +44,10 @@ npm run setup
 
 A fresh deployment does not need any of this: the app detects an empty database
 and creates its own tables on the first request (`src/lib/bootstrap.ts`), only
-ever when the tables are absent, behind an advisory lock, and never altering
-anything that already exists. `AUTO_MIGRATE=off` disables it.
+ever when the tables are absent, and never altering anything that already
+exists. Every statement is idempotent, so simultaneous cold starts converge
+instead of one of them failing — `npm run test:bootstrap` proves that by racing
+eight real processes against an empty database. `AUTO_MIGRATE=off` disables it.
 
 `prisma/init.sql` is the same schema as plain SQL for running by hand, and
 `src/lib/schema-sql.ts` is the bundled copy the bootstrap executes. CI
@@ -81,9 +83,10 @@ repository's Pages URL points people to the real app.
 | `npm run seed` | Create/repair the administrator account and scoring config |
 | `npm run bank:build` | Regenerate `content/bank/questions.json` and the curated catalogue |
 | `npm run bank:verify` | Validate the bank: schema, keys, math rendering, form integrity |
-| `npm run test` | `bank:verify` + `test:flow` + `test:admin` |
+| `npm run test` | `bank:verify` + `test:flow` + `test:admin` + `test:bootstrap` |
 | `npm run test:flow` | End-to-end attempt lifecycle, routing, scoring, edge cases |
 | `npm run test:admin` | Admin CRUD, retirement, replacement, CSV round trip, form building |
+| `npm run test:bootstrap` | Races eight processes at an empty database (PostgreSQL only) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint (Next.js core-web-vitals + TypeScript rules) |
 | `npm run db:studio` | Prisma Studio |
