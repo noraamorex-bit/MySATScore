@@ -26,11 +26,21 @@ const POOLED_PORTS = ["6543"];
 export function normalizeDatabaseUrl(raw: string | undefined): string | undefined {
   if (!raw) return raw;
 
-  if (/\[YOUR-PASSWORD\]|\[PASSWORD\]|YOUR-PASSWORD/i.test(raw)) {
-    throw new DatabaseUrlError(
-      "DATABASE_URL still contains the placeholder [YOUR-PASSWORD]. Replace it " +
-        "with your actual database password (including removing the square brackets).",
-    );
+  const PLACEHOLDER = /\[YOUR-PASSWORD\]|\[PASSWORD\]|YOUR-PASSWORD/i;
+  if (PLACEHOLDER.test(raw)) {
+    // Dashboards hand out a connection string with the password blanked out.
+    // Editing it inside a long string is awkward, and close to impossible on a
+    // phone, so accept the password on its own and substitute it here.
+    const password = process.env.DATABASE_PASSWORD;
+    if (password) {
+      raw = raw.replace(PLACEHOLDER, encodeURIComponent(password));
+    } else {
+      throw new DatabaseUrlError(
+        "DATABASE_URL still contains the placeholder [YOUR-PASSWORD]. Either replace " +
+          "it with your database password, or set DATABASE_PASSWORD and leave the " +
+          "placeholder in place and it will be filled in for you.",
+      );
+    }
   }
 
   // Only Postgres connection strings need any of this.

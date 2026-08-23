@@ -86,13 +86,17 @@ This is the address and password the app uses to reach your database.
    postgresql://postgres.abcdefghijkl:[YOUR-PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres
    ```
 
-4. Replace `[YOUR-PASSWORD]` — including the square brackets — with the database
-   password you saved in step 1.1. This is the only edit you need to make.
+4. **You do not have to edit it.** Copy it exactly as it is, placeholder and
+   all, and in Step 3.2 supply your password as a separate setting called
+   `DATABASE_PASSWORD`. The app fills it in, escaping any awkward characters.
+
+   If you would rather edit the string yourself, replace `[YOUR-PASSWORD]` —
+   square brackets included — with your password from step 1.1 and skip
+   `DATABASE_PASSWORD`. Either way works.
 
    > You may have seen guides telling you to add `?pgbouncer=true` to the end.
    > **You do not need to** — the app recognises a pooled connection string and
-   > adds that itself. If you leave the `[YOUR-PASSWORD]` placeholder in by
-   > mistake, it will tell you so in plain words rather than failing obscurely.
+   > adds that itself.
 
 **Save this whole string in a note.** You need it in Step 3. Treat it like a
 password — anyone with it can read your database.
@@ -146,9 +150,10 @@ For each one: type the name, paste the value, click **Add**.
 | `DATABASE_URL` | the full connection string from Step 1.3 |
 | `AUTH_SECRET` | a long random string — see below |
 | `ADMIN_EMAIL` | the email address you will use to manage questions |
+| `DATABASE_PASSWORD` | your database password — only if you left `[YOUR-PASSWORD]` in the string above |
 
-There is an optional fourth, `AUTO_MIGRATE=off`, which stops the app creating
-its own tables if you would rather run `prisma/init.sql` yourself.
+There is one more optional setting, `AUTO_MIGRATE=off`, which stops the app
+creating its own tables if you would rather run `prisma/init.sql` yourself.
 
 **About `AUTH_SECRET`:** this is a private key the app uses to sign login
 cookies, so nobody can forge being logged in as someone else. It must be at

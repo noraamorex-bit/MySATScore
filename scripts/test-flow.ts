@@ -310,6 +310,16 @@ async function main(): Promise<void> {
     normalizeDatabaseUrl("postgresql://postgres:pw@db.abcd.supabase.co:5432/postgres") ===
       "postgresql://postgres:pw@db.abcd.supabase.co:5432/postgres");
   check("a sqlite url is left alone", normalizeDatabaseUrl("file:./dev.db") === "file:./dev.db");
+  const withPlaceholder = "postgresql://u:[YOUR-PASSWORD]@h.pooler.supabase.com:6543/postgres";
+  process.env.DATABASE_PASSWORD = "s3cr3t/pass word";
+  const filled = normalizeDatabaseUrl(withPlaceholder)!;
+  check("DATABASE_PASSWORD fills in the placeholder",
+    !filled.includes("YOUR-PASSWORD") && filled.includes("s3cr3t"), filled);
+  check("a password with url-unsafe characters is escaped",
+    filled.includes("%2F") && filled.includes("%20"), filled);
+  check("the filled string still gains the pooler parameters", filled.includes("pgbouncer=true"));
+  delete process.env.DATABASE_PASSWORD;
+
   check("an unedited [YOUR-PASSWORD] placeholder is rejected", (() => {
     try {
       normalizeDatabaseUrl("postgresql://u:[YOUR-PASSWORD]@h.pooler.supabase.com:6543/postgres");
