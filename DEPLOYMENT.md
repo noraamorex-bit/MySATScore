@@ -87,18 +87,12 @@ This is the address and password the app uses to reach your database.
    ```
 
 4. Replace `[YOUR-PASSWORD]` — including the square brackets — with the database
-   password you saved in step 1.1.
+   password you saved in step 1.1. This is the only edit you need to make.
 
-5. Add this to the very end, exactly as written:
-
-   ```
-   ?pgbouncer=true&connection_limit=1
-   ```
-
-   So the finished string ends with `.../postgres?pgbouncer=true&connection_limit=1`.
-
-   > **Why:** it tells the app it is talking through a pooler, so it adjusts how
-   > it sends queries. Without it you will get intermittent errors.
+   > You may have seen guides telling you to add `?pgbouncer=true` to the end.
+   > **You do not need to** — the app recognises a pooled connection string and
+   > adds that itself. If you leave the `[YOUR-PASSWORD]` placeholder in by
+   > mistake, it will tell you so in plain words rather than failing obscurely.
 
 **Save this whole string in a note.** You need it in Step 3. Treat it like a
 password — anyone with it can read your database.

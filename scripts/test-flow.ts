@@ -296,6 +296,29 @@ async function main(): Promise<void> {
   const emptyScore = scoreSections([], {});
   check("scoring an empty attempt does not crash", emptyScore.sections.length === 0 && emptyScore.total === null);
 
+  section("Connection string handling");
+  const { normalizeDatabaseUrl, DatabaseUrlError } = await import("../src/lib/database-url");
+  const pooled = "postgresql://postgres.abcd:pw123@aws-0-eu-west-1.pooler.supabase.com:6543/postgres";
+  const repaired = normalizeDatabaseUrl(pooled)!;
+  check("a pooler string gains the pgbouncer parameters",
+    repaired.includes("pgbouncer=true") && repaired.includes("connection_limit=1"), repaired);
+  check("the password survives normalisation", repaired.includes("pw123"));
+  check("an already-correct string is left alone",
+    normalizeDatabaseUrl(`${pooled}?pgbouncer=true&connection_limit=1`) ===
+      `${pooled}?pgbouncer=true&connection_limit=1`);
+  check("a direct connection string is left alone",
+    normalizeDatabaseUrl("postgresql://postgres:pw@db.abcd.supabase.co:5432/postgres") ===
+      "postgresql://postgres:pw@db.abcd.supabase.co:5432/postgres");
+  check("a sqlite url is left alone", normalizeDatabaseUrl("file:./dev.db") === "file:./dev.db");
+  check("an unedited [YOUR-PASSWORD] placeholder is rejected", (() => {
+    try {
+      normalizeDatabaseUrl("postgresql://u:[YOUR-PASSWORD]@h.pooler.supabase.com:6543/postgres");
+      return false;
+    } catch (error) {
+      return error instanceof DatabaseUrlError;
+    }
+  })());
+
   section("Grading units");
   const spr = bank.find((q) => q.answerFormat === "student-response" && q.correct.includes("/"));
   if (spr) {
