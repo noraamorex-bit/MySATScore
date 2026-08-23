@@ -20,7 +20,8 @@
     "test:flow": "tsx scripts/test-flow.ts",
     "postinstall": "prisma generate",
     "test:admin": "tsx scripts/test-admin.ts",
-    "test": "npm run bank:verify && npm run test:flow && npm run test:admin"
+    "test": "npm run bank:verify && npm run test:flow && npm run test:admin",
+    "schema:sql": "tsx scripts/generate-schema-sql.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",

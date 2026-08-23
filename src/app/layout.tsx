@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { ensureSchema } from "@/lib/bootstrap";
 
 export const metadata: Metadata = {
   title: {
@@ -35,7 +36,11 @@ try {
 } catch (e) {}
 `;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // A fresh deployment starts with an empty database; create the tables on the
+  // first request rather than making someone run a migration by hand.
+  await ensureSchema();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>

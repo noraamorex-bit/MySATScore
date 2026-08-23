@@ -50,7 +50,7 @@ jobs:
       # prisma/init.sql is what a deployer pastes into their database console,
       # so it must stay in step with the schema. Regenerate it and fail if the
       # committed copy has drifted.
-      - name: Check prisma/init.sql is up to date
+      - name: Check the generated schema files are up to date
         run: |
           npx prisma migrate diff \
             --from-empty --to-schema-datamodel prisma/schema.prisma --script \
@@ -61,4 +61,10 @@ jobs:
             echo "  npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script"
             exit 1
           fi
-          echo "prisma/init.sql matches the schema."
+          npx tsx scripts/generate-schema-sql.ts
+          if ! git diff --quiet -- src/lib/schema-sql.ts; then
+            echo "src/lib/schema-sql.ts is out of date. Regenerate it with:"
+            echo "  npx tsx scripts/generate-schema-sql.ts"
+            exit 1
+          fi
+          echo "prisma/init.sql and src/lib/schema-sql.ts both match the schema."

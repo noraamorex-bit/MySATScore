@@ -42,9 +42,14 @@ npm run db:use-postgres
 npm run setup
 ```
 
-`prisma/init.sql` is the schema as plain SQL, for pasting into a hosted
-provider's console when you cannot run Prisma against it. CI regenerates it and
-fails if it has drifted from `schema.prisma`.
+A fresh deployment does not need any of this: the app detects an empty database
+and creates its own tables on the first request (`src/lib/bootstrap.ts`), only
+ever when the tables are absent, behind an advisory lock, and never altering
+anything that already exists. `AUTO_MIGRATE=off` disables it.
+
+`prisma/init.sql` is the same schema as plain SQL for running by hand, and
+`src/lib/schema-sql.ts` is the bundled copy the bootstrap executes. CI
+regenerates both and fails if either has drifted from `schema.prisma`.
 
 ---
 

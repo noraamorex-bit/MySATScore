@@ -55,28 +55,17 @@ Nothing asks for a credit card.
    - **Region:** pick the one closest to you.
 3. Click **Create new project** and wait 1–2 minutes while it sets up.
 
-### 1.2 Create the tables
+### 1.2 The tables — nothing to do
 
-The database starts completely empty. This step creates the nine tables the app
-needs.
+Older versions of this guide asked you to paste a large SQL file here. **You no
+longer need to.** The first time anyone opens your site, the app notices the
+database is empty and creates its nine tables itself.
 
-1. In your GitHub repository, open this file:
-   **`prisma/init.sql`**
-   (or go straight to
-   <https://github.com/noraamorex-bit/MySATScore/blob/main/prisma/init.sql>)
-2. Click the **Copy raw file** button (the small copy icon at the top right of
-   the file).
-3. Back in Supabase, click **SQL Editor** in the left sidebar, then
-   **New query**.
-4. Paste everything into the big text box.
-5. Click **Run** (or press Ctrl+Enter / Cmd+Enter).
-
-You should see **Success. No rows returned.** That is what success looks like
-here — it created tables rather than fetching anything.
-
-To check: click **Table Editor** in the sidebar. You should see nine tables:
-`User`, `Attempt`, `AttemptModule`, `Answer`, `QuestionExposure`,
-`QuestionStat`, `QuestionOverride`, `CuratedForm`, `ScoringConfig`.
+It only ever does this when the tables are genuinely absent, it takes a database
+lock first so two copies of the app cannot race each other, and it never alters
+or deletes anything that already exists. If you would rather manage the schema
+yourself, set `AUTO_MIGRATE` to `off` in Step 3.2 and run `prisma/init.sql` by
+hand.
 
 ### 1.3 Copy the connection string
 
@@ -164,17 +153,21 @@ For each one: type the name, paste the value, click **Add**.
 | `AUTH_SECRET` | a long random string — see below |
 | `ADMIN_EMAIL` | the email address you will use to manage questions |
 
+There is an optional fourth, `AUTO_MIGRATE=off`, which stops the app creating
+its own tables if you would rather run `prisma/init.sql` yourself.
+
 **About `AUTH_SECRET`:** this is a private key the app uses to sign login
 cookies, so nobody can forge being logged in as someone else. It must be at
-least 16 characters; 40 or more is better. It is never shown to anyone.
+least 16 characters. It is never shown to anyone and you never have to remember
+it.
 
-To make one, either:
-- use your password manager's "generate password" feature and ask for 40+
-  characters, or
-- use the password generator built into Chrome, Safari, or Firefox, or
-- genuinely mash your keyboard for 40+ characters of letters and digits.
+**On a phone**, the easiest thing is to invent a long phrase and type it — for
+example `purple-kettle-marathon-1987-stapler`. Anything of your own invention
+that is 20 characters or more is fine. Do not use a single dictionary word, a
+name, or a password you use anywhere else.
 
-Do not use a real word, and do not reuse a password you use elsewhere.
+If you have a password manager to hand, its generator set to 40 characters is
+better still.
 
 **About `ADMIN_EMAIL`:** whoever registers on your site with this exact email
 address automatically becomes the administrator. Use your own email, and get it
@@ -286,7 +279,7 @@ service will charge you without you explicitly upgrading.
 | Deployment fails, log mentions `AUTH_SECRET` | The secret is missing or shorter than 16 characters. Fix it in Environment Variables and redeploy. |
 | Site loads but every page shows an error | `DATABASE_URL` is wrong. Check you replaced `[YOUR-PASSWORD]`, used the **Transaction pooler** string (port 6543), and added `?pgbouncer=true&connection_limit=1`. |
 | Errors that come and go at random | You probably used the *Direct connection* string instead of the pooler. |
-| `relation "User" does not exist` | Step 1.2 did not run. Go back to the Supabase SQL Editor and run `prisma/init.sql`. |
+| `relation "User" does not exist` | The app could not create its tables — usually a `DATABASE_URL` that points at the right server but the wrong database name. Check the Vercel logs for a line starting `[bootstrap]`. |
 | Build fails mentioning Prisma or `sqlite` | Something switched `prisma/schema.prisma` back to SQLite. Line 14 must say `"postgresql"`; line 10 must still say `"prisma-client-js"`. |
 | No **Admin** link after registering | The registered email does not exactly match `ADMIN_EMAIL`. |
 
@@ -299,7 +292,8 @@ always in the last few red lines.
 
 # Appendix A — Doing it from a terminal instead
 
-If you are comfortable with a command line, this replaces Steps 1.2 and 4.
+If you are comfortable with a command line, this is the equivalent of Step 4
+(and lets you create the schema explicitly rather than letting the app do it).
 You need [Node.js 20+](https://nodejs.org) and Git.
 
 ```bash
@@ -307,7 +301,7 @@ git clone https://github.com/noraamorex-bit/MySATScore.git
 cd MySATScore
 npm install
 
-# Create the tables and the admin account (Steps 1.2 and 4)
+# The app creates its own tables, but you can do it explicitly if you prefer
 export DATABASE_URL="postgresql://...your pooled string..."
 npx prisma db push
 ADMIN_EMAIL="you@example.com" ADMIN_PASSWORD="something-long" npm run seed
